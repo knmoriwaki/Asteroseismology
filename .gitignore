@@ -1,0 +1,7 @@
+__pycache__/
+output/
+tmp/
+training_data/
+test_data/
+param/
+.ipynb_checkpoints/
