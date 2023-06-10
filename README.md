@@ -13,14 +13,13 @@ Install the following libraries with `pip`.
 
 ## How to Run
 
-Training:
-
 Put your training and validation data (e.g., 0000000.0.data, Combinations.txt) at ./training_data
+
 Put your test data at ./test_data
 
 Run training and test code by 
 ```
-./run.sh
+./sub<F2>.sh
 ```
 You can change the parameters in run.sh.
 
