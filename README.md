@@ -19,7 +19,7 @@ Put your test data at ./test_data
 
 Run training and test code by 
 ```
-./sub<F2>.sh
+./sub.sh
 ```
 You can change the parameters in run.sh.
 
