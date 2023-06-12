@@ -174,7 +174,8 @@ def train(device):
             for i, (ll, oo) in enumerate(zip(val_label, output)):
                 id_max = torch.argmax(oo)
                 pred = xmin + dx * (id_max + 0.5)
-                print(ll.item(), pred.item(), file=f)
+                true = xmin + dx * (ll + 0.5)
+                print(true.item(), pred.item(), file=f)
         print(f"# output {fname}", file=sys.stderr)
 
         fname = "{}/val_dist0.txt".format(args.model_dir)
@@ -217,7 +218,8 @@ def test(device):
         for dd, ll, oo in zip(data, label, output):
             id_max = torch.argmax(oo)
             pred = xmin + dx * (id_max + 0.5)
-            print(ll.item(), pred.item(), file=f)
+            true = xmin + dx * (ll + 0.5)
+            print(true.item(), pred.item(), file=f)
     print(f"output {fname}", file=sys.stderr)
 
 if __name__ == "__main__":
