@@ -214,7 +214,7 @@ def test(device):
     _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
     fname_comb = f"{args.test_dir}/Combinations.txt"
     data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
-    
+
     ### output test result ###
     fname = "{}/test.txt".format(args.model_dir)
     with open(fname, "w") as f:
@@ -222,7 +222,7 @@ def test(device):
 
             dd = torch.unsqueeze(dd, dim=0).to(device)
             ll = torch.unsqueeze(ll, dim=0).to(device)
-
+            print(ll.item())
             output = model(dd)
             if args.loss == "nllloss":
                 id_max = torch.argmax(output)
