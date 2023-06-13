@@ -6,12 +6,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 def MyModel(args):
+    if args.loss == "nllloss":
+        last_act = nn.LogSoftmax(dim=1)
+    else:
+        last_act = nn.Sigmoid() 
+
     if args.model == "RNN":
-        model = RecurrentNet(input_dim=args.n_feature, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer)
+        model = RecurrentNet(input_dim=args.n_feature, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, last_act=last_act)
     elif args.model == "CNN":
-        model = ConvNet(input_dim=args.n_feature, seq_length=args.seq_length, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, r_drop=args.r_drop)
+        model = ConvNet(input_dim=args.n_feature, seq_length=args.seq_length, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
     elif args.model == "BNN":
-        model = ConvNet(input_dim=args.n_feature, seq_length=args.seq_length, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer)
+        model = ConvNet(input_dim=args.n_feature, seq_length=args.seq_length, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, last_act=last_act)
         transform_model(model, nn.Conv2d, bnn.BayesConv2d, 
             args={"prior_mu":0, "prior_sigma":0.1, "in_channels" : ".in_channels",
                   "out_channels" : ".out_channels", "kernel_size" : ".kernel_size",

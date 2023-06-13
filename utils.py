@@ -46,7 +46,7 @@ def load_fnames(data_dir, ndata, r_train = 0.9, shuffle=True):
 
     return train_fnames, val_fnames, train_ids, val_ids
 
-def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, output_id=[13], n_feature=1, seq_length=10, norm_params=None, data_aug=[], output_dtype=torch.long, device="cpu"):
+def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, output_id=[13], n_feature=1, seq_length=10, norm_params=None, loss="l1norm", data_aug=[], output_dtype=torch.long, device="cpu"):
 
     if len(np.shape(norm_params)) == 1:
         norm_params = norm_params.reshape(1,-1)
@@ -75,7 +75,11 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     xmin = 0.0
     xmax = 90.001
     dx = ( xmax - xmin ) / output_dim
-    label = [ int( ( l - xmin ) / dx ) for l in label ]  ### this is for nllloss and doesn't work properly for other losses.
+    if loss == "nllloss":
+        label = [ int( ( l - xmin ) / dx ) for l in label ]  ### this is for nllloss and doesn't work properly for other losses.
+    else:
+        if len(np.shape(label)) == 1:
+            label = ( label.reshape(-1, 1) - xmin ) / ( xmax - xmin ) #(ndata, 1) within [0,1]
 
     if np.shape(data)[1] != seq_length:
         print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
