@@ -5,3 +5,4 @@ training_data/
 test_data/
 param/
 .ipynb_checkpoints/
+.DS_Store

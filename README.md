@@ -9,7 +9,9 @@ Estimate the inclination angle from the spectrum
 Install the following libraries with `pip`.
 - torch==1.12.0
 - torchvision==0.13.0
+- torchinfo
 - tqdm
+- matplotlib
 
 ## How to Run
 

@@ -40,7 +40,7 @@ parser.add_argument("--loss", dest="loss", default="l1_norm", help="loss functio
 args = parser.parse_args()
 
 xmin = 0.0
-xmax = 90.
+xmax = 90.001
 dx = ( xmax - xmin ) / args.output_dim
 
 def main():
@@ -73,7 +73,7 @@ def update_learning_rate(optimizer, scheduler):
     old_lr = optimizer.param_groups[0]["lr"]
     scheduler.step()
     lr = optimizer.param_groups[0]['lr']
-    print('learning rate %.7f -> %.7f' % (old_lr, lr))
+    print('# learning rate %.7f -> %.7f' % (old_lr, lr))
 
 ####################################################
 ### training
@@ -100,14 +100,6 @@ def train(device):
 
     if args.loss == "nllloss":
         loss_func = nn.NLLLoss(reduction="mean")
-    elif args.loss == "l1norm":
-        loss_func = nn.L1Loss(reduction="mean")
-    elif args.loss == "weighted_l1norm":
-        loss_func = nn.L1Loss(reduction="none")
-    elif args.loss == "bce":
-        loss_func = nn.BCELoss(reduction="mean")
-    elif args.loss == "weighted_bce":
-        loss_func = nn.BCELoss(reduction="none")
     else:
         print("Error: unknown loss", file=sys.stderr)
         sys.exit(1)
@@ -119,7 +111,7 @@ def train(device):
     train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, r_train=0.9, shuffle=True)
     fname_comb = f"{args.data_dir}/Combinations.txt"
 
-    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, device=device)
+    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, device=None)
     val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, device=device)
 
     dataset = MyDataset(data, label)
@@ -137,7 +129,9 @@ def train(device):
         if ee != 0:
             update_learning_rate(optimizer, scheduler)
         for i, (dd, ll) in enumerate(train_loader):
-
+            
+            dd = dd.to(device)
+            ll = ll.to(device)
             output = model(dd)
 
             model.eval()
@@ -162,6 +156,9 @@ def train(device):
             model.zero_grad()
             loss.backward()
             optimizer.step()
+
+            del dd, ll
+            torch.cuda.empty_cache()
 
             idx += 1
  
