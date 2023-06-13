@@ -157,7 +157,7 @@ def train(device):
             loss.backward()
             optimizer.step()
 
-            del dd, ll
+            del dd, ll, output
             torch.cuda.empty_cache()
 
             idx += 1
@@ -206,17 +206,24 @@ def test(device):
     norm_params = np.loadtxt(args.fname_norm)
     _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
     fname_comb = f"{args.test_dir}/Combinations.txt"
-    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params,  device=device)
+    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params,  device=None)
     
     ### output test result ###
-    output = model(data)
     fname = "{}/test.txt".format(args.model_dir)
     with open(fname, "w") as f:
-        for dd, ll, oo in zip(data, label, output):
-            id_max = torch.argmax(oo)
+        for dd, ll in zip(data, label):
+
+            dd = dd.to(device)
+            ll = ll.to(device)
+
+            output = model(dd)
+            id_max = torch.argmax(output)
             pred = xmin + dx * (id_max + 0.5)
             true = xmin + dx * (ll + 0.5)
             print(true.item(), pred.item(), file=f)
+
+            del dd, ll, output
+            torch.cuda.empty_cache()
     print(f"output {fname}", file=sys.stderr)
 
 if __name__ == "__main__":
