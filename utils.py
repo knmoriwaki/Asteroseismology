@@ -73,7 +73,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     label = np.loadtxt(fname_comb, skiprows=5, usecols=output_id)
     label = label[data_ids] # (ndata)
     xmin = 0.0
-    xmax = 90.
+    xmax = 90.001
     dx = ( xmax - xmin ) / output_dim
     label = [ int( ( l - xmin ) / dx ) for l in label ]  ### this is for nllloss and doesn't work properly for other losses.
 
@@ -85,8 +85,11 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
         print(f"Error: inconsistent n_feature {np.shape(data)[2]} != {n_feature}", file=sys.stderr)
         sys.exit(1)
 
-    data = torch.from_numpy( np.array(data).astype(np.float32) ).to(device)
-    label = torch.from_numpy( np.array(label) ).to(output_dtype).to(device) 
+    data = torch.from_numpy( np.array(data).astype(np.float32) )
+    label = torch.from_numpy( np.array(label) ).to(output_dtype)
+    if device is not None:
+        data = data.to(device)
+        label = label.to(device)
 
     print( f"# data size: {data.size()}" )
     print( f"# label size: {label.size()}" )
