@@ -31,20 +31,20 @@ def print_pdf(pdf, xmin, xmax):
 def load_fnames(data_dir, ndata, r_train = 0.9, shuffle=True):
 
     id_list = np.array(range(ndata))
-    fnames = [ "{}/{:07d}.0.data".format(data_dir, i) for i in id_list ]
     if shuffle == True:
         np.random.shuffle(id_list)
-        fnames = [ fnames[i] for i in id_list ]
 
-    train_fnames = [ f for f in fnames[:int(ndata * r_train)] ]
-    val_fnames = [ f for f in fnames[int(ndata * r_train):] ]
-    train_ids = [ i for i in id_list[:int(ndata * r_train)] ]
-    val_ids = [ i for i in id_list[int(ndata * r_train):] ]
+    ids_train = [ i for i in id_list[:int(ndata * r_train)] ]
+    ids_val = [ i for i in id_list[int(ndata * r_train):] ]
 
-    if len(val_fnames) == 0:
-        val_fnames = [train_fnames[-1]]
+    fnames_train = [ "{}/{:07d}.0.data".format(data_dir, i) for i in ids_train ]
+    fnames_val = [ "{}/{:07d}.0.data".format(data_dir, i) for i in ids_val ]
 
-    return train_fnames, val_fnames, train_ids, val_ids
+    if len(ids_val) == 0:
+        ids_val = [ids_train[-1]]
+        fnames_val = [fnames_train[-1]]
+
+    return fnames_train, fnames_val, ids_train, ids_val
 
 def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, output_id=[13], n_feature=1, seq_length=10, norm_params=None, loss="l1norm", data_aug=[], device="cpu"):
 
@@ -77,10 +77,16 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     if loss == "nllloss":
         dx = ( xmax - xmin ) / output_dim
         label = [ int( ( l - xmin ) / dx ) for l in label ]  ### this is for nllloss and doesn't work properly for other losses.
+        if np.max( label ) >= output_dim:
+            print(f"Error: label value {np.max(label)} is greater than output_dim {output_dim}")
+            sys.exit(1)
     else:
         label = ( label - xmin ) / ( xmax - xmin )
         if len(np.shape(label)) == 1:
             label = label.reshape(-1, 1) #(ndata, 1) within [0,1]
+        if np.shape(label)[1] != output_dim:
+            print(f"Error: inconsistent output_dim {np.shape(label)[1]} != {output_dim}", file=sys.stderr)
+            sys.exit(1)
 
     if np.shape(data)[1] != seq_length:
         print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
@@ -90,13 +96,15 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
         print(f"Error: inconsistent n_feature {np.shape(data)[2]} != {n_feature}", file=sys.stderr)
         sys.exit(1)
 
+    ### convert the data to torch.tensor ###
     data = torch.from_numpy( np.array(data).astype(np.float32) )
-    
     label = torch.from_numpy( np.array(label) )
     if loss == "nllloss":
         label = label.to(torch.long)
     else:
         label = label.to(torch.float32)
+
+    ### send the data to device ###
     if device is not None:
         data = data.to(device)
         label = label.to(device)

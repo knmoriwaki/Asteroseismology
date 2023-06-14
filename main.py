@@ -22,7 +22,7 @@ parser.add_argument("--data_dir", dest="data_dir", default="./Data_analysis", he
 parser.add_argument("--test_dir", dest="test_dir", default="./test_data", help="Root directory of test data")
 parser.add_argument("--ndata", dest="ndata", type=int, default=10, help="the number of data")
 parser.add_argument("--model_dir", dest="model_dir", default="./Model", help="Root directory to save learned model parameters")
-parser.add_argument("--output_id", dest="output_id", nargs="+", type=int, default=13, help="the column number in Combinations.txt")
+parser.add_argument("--output_id", dest="output_id", nargs="+", type=int, default=13, help="the column number in Combinations.txt. You can put multiple ids.")
 
 parser.add_argument("--model", dest="model", default="NN", help="model")
 parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.txt", help="file name of the normalization parameters")
@@ -52,7 +52,6 @@ def main():
 
         torch.cuda.manual_seed(random_seed)
         torch.backends.cudnn.deterministic = True
-        #torch.set_default_tensor_type("torch.cuda.FloatTensor")
 
         print("# GPU is available")
     else:
@@ -222,7 +221,7 @@ def test(device):
 
             dd = torch.unsqueeze(dd, dim=0).to(device)
             ll = torch.unsqueeze(ll, dim=0).to(device)
-            print(ll.item())
+
             output = model(dd)
             if args.loss == "nllloss":
                 id_max = torch.argmax(output)
