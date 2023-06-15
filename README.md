@@ -45,6 +45,13 @@ You can check the model structure in the output file at `./tmp`
 - Output shape: (batch_size, output_dim)
 
 
+Loss functions:
+
+- NLLLoss: set output_dim > 1
+
+- L1norm: set output_dim = 1
+
+
 ## References
 
 
