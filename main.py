@@ -29,7 +29,7 @@ parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.tx
 parser.add_argument("--n_feature", dest="n_feature", type=int, default=1, help="number of input elements")
 parser.add_argument("--seq_length", dest="seq_length", type=int, default=45412, help="length of the sequence to input into RNN")
 parser.add_argument("--hidden_dim", dest="hidden_dim", type=int, default=32, help="number of NN nodes")
-parser.add_argument("--output_dim", dest="output_dim", type=int, default=1, help="the output dimension")
+parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, help="the output dimension")
 parser.add_argument("--n_layer", dest="n_layer", type=int, default=5, help="number of NN layers")
 parser.add_argument("--r_drop", dest="r_drop", type=float, default=0.0, help="dropout rate")
 parser.add_argument("--batch_size", dest="batch_size", type=int, default=4, help="batch size")
@@ -80,7 +80,27 @@ def update_learning_rate(optimizer, scheduler):
 
 def train(device):
 
-    ### define network, optimizer, and loss function ###
+    ### define loss function ###
+
+    if args.loss == "nllloss":
+        loss_func = nn.NLLLoss(reduction="mean")
+        if args.output_dim < 2:
+            print("Error: output_dim should be greater than 1 for NLLLoss", file=sys.stderr)
+            sys.exit(1)
+    elif args.loss == "l1norm":
+        loss_func = nn.L1Loss(reduction="mean")
+        odim = 1 if isinstance(args.output_id, int) else len(args.output_id)
+        if odim != args.output_dim:
+            print("Warning: inconsistent output_dim. Use output_dim = {:d}".format(odim), file=sys.stderr)
+            args.output_dim = odim
+    else:
+        print("Error: unknown loss", file=sys.stderr)
+        sys.exit(1)
+
+    print( f"# loss function: {args.loss}")
+
+
+    ### define network and optimizer ###
     model = MyModel(args)
 
     print(model)
@@ -96,16 +116,6 @@ def train(device):
 
     print( f"# hidden_dim: {args.hidden_dim}" )
     print( f"# n_layer: {args.n_layer}" )
-
-    if args.loss == "nllloss":
-        loss_func = nn.NLLLoss(reduction="mean")
-    elif args.loss == "l1norm":
-        loss_func = nn.L1Loss(reduction="mean")
-    else:
-        print("Error: unknown loss", file=sys.stderr)
-        sys.exit(1)
-
-    print( f"# loss function: {args.loss}")
 
     ### load training and validation data ###
     norm_params = np.loadtxt(args.fname_norm)
@@ -198,6 +208,12 @@ def train(device):
 ### test
 ####################################################
 def test(device):
+
+    if args.loss == "l1norm":
+        odim = 1 if isinstance(args.output_id, int) else len(args.output_id)
+        if odim != args.output_dim:
+            print("Warning: inconsistent output_dim. Use output_dim = {:d}".format(odim), file=sys.stderr)
+            args.output_dim = odim
 
     ### define network ###
     model = MyModel(args)

@@ -28,7 +28,7 @@ def print_pdf(pdf, xmin, xmax):
     print("#### end of label distribution ####")
 
 
-def load_fnames(data_dir, ndata, r_train = 0.9, shuffle=True):
+def load_fnames(data_dir, ndata, id_start=1, r_train = 0.9, shuffle=True):
 
     id_list = np.array(range(ndata))
     if shuffle == True:
@@ -37,8 +37,8 @@ def load_fnames(data_dir, ndata, r_train = 0.9, shuffle=True):
     ids_train = [ i for i in id_list[:int(ndata * r_train)] ]
     ids_val = [ i for i in id_list[int(ndata * r_train):] ]
 
-    fnames_train = [ "{}/{:07d}.0.data".format(data_dir, i) for i in ids_train ]
-    fnames_val = [ "{}/{:07d}.0.data".format(data_dir, i) for i in ids_val ]
+    fnames_train = [ "{}/{:07d}.0.data".format(data_dir, i+id_start) for i in ids_train ]
+    fnames_val = [ "{}/{:07d}.0.data".format(data_dir, i+id_start) for i in ids_val ]
 
     if len(ids_val) == 0:
         ids_val = [ids_train[-1]]
@@ -57,8 +57,8 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     data = []
     for f in fnames:
         if os.path.exists(f) == False: 
-            print(f"# Warning: file not found {f}", file=sys.stderr) 
-            continue 
+            print(f"# Error: file not found {f}", file=sys.stderr) 
+            sys.exit(1)
 
         for da in [0] + data_aug:
             if da == 0:
@@ -70,7 +70,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
             data.append(d)
     
     ### read label data ###
-    label = np.loadtxt(fname_comb, skiprows=5, usecols=output_id)
+    label = np.loadtxt(fname_comb, skiprows=0, usecols=output_id)
     label = label[data_ids] # (ndata)
     xmin = 0.0
     xmax = 90.001

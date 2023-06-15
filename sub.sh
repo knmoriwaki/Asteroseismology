@@ -9,17 +9,18 @@ hidden_dim=8
 n_layer=4
 r_drop=0.5
 
-batch_size=1
-epoch=10
+batch_size=64
+epoch=4
 lr=0.001
 
 loss=nllloss
+loss=l1norm
 
 data_dir=./training_data
-ndata=7
+ndata=2000
 
 test_dir=./test_data
-ndata_test=7
+ndata_test=10
 
 model_base=${model}_nf${n_feature}_hd${hidden_dim}_nl${n_layer}_r${r_drop}_${loss}_bs${batch_size}_ep${epoch}_lr${lr}
 output_dir=./output/${model_base}
@@ -35,5 +36,5 @@ echo "# output ./tmp/out_${today}_${model_base}.log"
 
 ### test ###
 model_file_name=model.pth
-python main.py --test_dir $test_dir --ndata $ndata_test --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --epoch $epoch --lr $lr 
+python main.py --test_dir $test_dir --ndata $ndata_test --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss
 
