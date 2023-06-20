@@ -72,16 +72,10 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     ### read label data ###
     label = np.loadtxt(fname_comb, skiprows=0, usecols=output_id)
     label = label[data_ids] # (ndata)
-    xmin = 0.0
-    xmax = 90.001
+    label = np.sin(label)
     if loss == "nllloss":
-        dx = ( xmax - xmin ) / output_dim
-        label = [ int( ( l - xmin ) / dx ) for l in label ]  ### this is for nllloss and doesn't work properly for other losses.
-        if np.max( label ) >= output_dim:
-            print(f"Error: label value {np.max(label)} is greater than output_dim {output_dim}")
-            sys.exit(1)
+        label = [ int( ( l - xmin ) / dx ) if l < 1 else output_dim - 1 for l in label ]  
     else:
-        label = ( label - xmin ) / ( xmax - xmin )
         if len(np.shape(label)) == 1:
             label = label.reshape(-1, 1) #(ndata, 1) within [0,1]
         if np.shape(label)[1] != output_dim:

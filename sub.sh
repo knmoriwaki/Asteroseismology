@@ -13,8 +13,11 @@ batch_size=64
 epoch=4
 lr=0.001
 
-loss=nllloss
+#loss=nllloss
+#output_dim=100
+
 loss=l1norm
+output_dim=1
 
 data_dir=./training_data
 ndata=2000
@@ -31,10 +34,10 @@ mkdir -p $model_dir
 
 ### training ###
 today=`date '+%Y-%m-%d'`
-python main.py --isTrain --data_dir $data_dir --ndata $ndata --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss > ./tmp/out_${today}_${model_base}.log
+python main.py --isTrain --data_dir $data_dir --ndata $ndata --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss --output_dim $output_dim > ./tmp/out_${today}_${model_base}.log
 echo "# output ./tmp/out_${today}_${model_base}.log"
 
 ### test ###
 model_file_name=model.pth
-python main.py --test_dir $test_dir --ndata $ndata_test --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss
+python main.py --test_dir $test_dir --ndata $ndata_test --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss --output_dim $output_dim
 

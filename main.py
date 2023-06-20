@@ -39,10 +39,6 @@ parser.add_argument("--lr", dest="lr", type=float, default=1e-3, help="learning 
 parser.add_argument("--loss", dest="loss", default="l1norm", help="loss function")
 args = parser.parse_args()
 
-xmin = 0.0
-xmax = 90.001
-dx = ( xmax - xmin ) / args.output_dim
-
 def main():
 
     is_cuda = torch.cuda.is_available()
@@ -181,11 +177,11 @@ def train(device):
             for i, (ll, oo) in enumerate(zip(val_label, output)):
                 if args.loss == "nllloss":
                     id_max = torch.argmax(oo)
-                    pred = xmin + dx * (id_max + 0.5)
-                    true = xmin + dx * (ll + 0.5)
+                    pred = (id_max + 0.5) / args.output_dim 
+                    true = (ll + 0.5) / output_dim 
                 else:
-                    pred = oo * ( xmax - xmin ) + xmin
-                    true = ll * ( xmax - xmin ) + xmin
+                    pred = oo 
+                    true = ll 
                 print(true.item(), pred.item(), file=f)
         print(f"# output {fname}", file=sys.stderr)
 
@@ -194,7 +190,7 @@ def train(device):
                 fname = "{}/val_dist{:d}.txt".format(args.model_dir, i)
                 with open(fname, "w") as f:
                     for iclass in range(args.output_dim):
-                        print(xmin + dx*(iclass+0.5), oo[iclass].item(), file=f)
+                        print((iclass+0.5)/args.output_dim, oo[iclass].item(), file=f)
                 print(f"# output {fname}", file=sys.stderr)
 
     ### save model ###
@@ -241,11 +237,11 @@ def test(device):
             output = model(dd)
             if args.loss == "nllloss":
                 id_max = torch.argmax(output)
-                pred = xmin + dx * (id_max + 0.5)
-                true = xmin + dx * (ll + 0.5)
+                pred = (id_max + 0.5) / args.output_dim
+                true = (ll + 0.5) / args.output_dim
             else:
-                pred = output * ( xmax - xmin ) + xmin
-                true = ll * ( xmax - xmin ) + xmin
+                pred = output 
+                true = ll 
             print(true.item(), pred.item(), file=f)
 
             del dd, ll, output
