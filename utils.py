@@ -72,7 +72,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     ### read label data ###
     label = np.loadtxt(fname_comb, skiprows=0, usecols=output_id)
     label = label[data_ids] # (ndata)
-    label = np.sin(label)
+    label = np.sin( np.deg2rad( label ) )
     if loss == "nllloss":
         label = [ int( l * output_dim ) if l < 1 else output_dim - 1 for l in label ]  
     else:
