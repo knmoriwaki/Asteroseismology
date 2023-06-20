@@ -5,8 +5,8 @@ seq_length=45412
 
 model=CNN 
 
-hidden_dim=8
-n_layer=4
+hidden_dim=32
+n_layer=6
 r_drop=0.5
 
 batch_size=64
@@ -23,7 +23,7 @@ data_dir=./training_data
 ndata=2000
 
 test_dir=./test_data
-ndata_test=10
+ndata_test=6
 
 model_base=${model}_nf${n_feature}_hd${hidden_dim}_nl${n_layer}_r${r_drop}_${loss}_bs${batch_size}_ep${epoch}_lr${lr}
 output_dir=./output/${model_base}

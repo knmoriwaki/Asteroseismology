@@ -128,8 +128,10 @@ def train(device):
 
     ### training ###
     idx = 0
+    n_per_epoch = float( int( ntrain / args.batch_size ) )
     print("Training...", file=sys.stderr)
     fout = "{}/log.txt".format(args.model_dir)
+    print(f"# output {fout}", file=sys.stderr)
     with open(fout, "w") as f:
         print("#idx loss loss_val", file=f)
     for ee in tqdm(range(args.epoch + args.epoch_decay), file=sys.stderr):
@@ -140,6 +142,7 @@ def train(device):
             dd = dd.to(device)
             ll = ll.to(device)
             output = model(dd)
+            print(ll)
 
             model.eval()
             with torch.no_grad():
@@ -155,9 +158,9 @@ def train(device):
                 loss = loss_func(output, ll)
                 loss_val = loss_func(output_val, val_label)
 
-            print("{:d} {:f} {:f}".format(idx, loss.item(), loss_val.item()) )
+            print("{:d} {:f} {:f} {:f}".format(idx, idx/n_per_epoch, loss.item(), loss_val.item()) )
             with open(fout, "a") as f:
-                print("{:d} {:f} {:f}".format(idx, loss.item(), loss_val.item()), file=f)
+                print("{:d} {:f} {:f} {:f}".format(idx, idx/n_per_epoch, loss.item(), loss_val.item()), file=f)
 
             model.zero_grad()
             loss.backward()
