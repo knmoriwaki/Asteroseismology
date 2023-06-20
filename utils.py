@@ -74,7 +74,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     label = label[data_ids] # (ndata)
     label = np.sin(label)
     if loss == "nllloss":
-        label = [ int( ( l - xmin ) / dx ) if l < 1 else output_dim - 1 for l in label ]  
+        label = [ int( l * dx ) if l < 1 else output_dim - 1 for l in label ]  
     else:
         if len(np.shape(label)) == 1:
             label = label.reshape(-1, 1) #(ndata, 1) within [0,1]
