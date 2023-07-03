@@ -7,23 +7,20 @@ model=CNN
 
 hidden_dim=32
 n_layer=6
-r_drop=0.5
+r_drop=0.25
 
-batch_size=64
-epoch=4
+batch_size=128
+epoch=2
 lr=0.001
 
-#loss=nllloss
-#output_dim=100
+loss=nlllosst
+output_dim=90
 
-loss=l1norm
-output_dim=1
+#loss=l1norm
+#output_dim=1
 
 data_dir=./training_data
-ndata=2000
-
-test_dir=./test_data
-ndata_test=6
+ndata=5000
 
 model_base=${model}_nf${n_feature}_hd${hidden_dim}_nl${n_layer}_r${r_drop}_${loss}_bs${batch_size}_ep${epoch}_lr${lr}
 output_dir=./output/${model_base}
@@ -38,6 +35,8 @@ python main.py --isTrain --data_dir $data_dir --ndata $ndata --model_dir $model_
 echo "# output ./tmp/out_${today}_${model_base}.log"
 
 ### test ###
+test_dir=./test_data
+ndata_test=6
 model_file_name=model.pth
-python main.py --test_dir $test_dir --ndata $ndata_test --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss --output_dim $output_dim
+#python main.py --test_dir $test_dir --ndata $ndata_test --model_dir $model_dir --model ${model} --fname_norm $fname_norm --n_feature $n_feature --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --epoch $epoch --lr $lr --loss $loss --output_dim $output_dim
 

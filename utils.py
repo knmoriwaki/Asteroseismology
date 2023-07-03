@@ -9,6 +9,34 @@ from torch.utils.data import Dataset
 
 from tqdm import tqdm
 
+tmin = 0
+tmax = 90
+
+def label_to_target(label, output_dim=1, loss="l1norm", norm="tmintmax"):
+    ### for "nllloss", convert the integers in [0,output_dim-1] to "floats" in [0,1]
+    if loss == "nllloss":
+        label = ( label + 0.5 ) / output_dim
+
+    ### convert the label in [0,1] to the values.
+    ### For sin normalization, we will just output the sin value in [0,1]
+    if norm == "tmintmax":
+        target = label * (tmax - tmin) + tmin
+    else:
+        target = label
+    return target
+
+def target_to_label(target, output_dim=1, loss="l1norm", norm="tmintmax"):
+    ### first normalize the values to be within [0,1]
+    if norm == "sin":
+        label = np.sin( np.deg2rad( target ) )
+    else:
+        label = ( target - tmin ) / ( tmax - tmin )
+
+    ### for "nllloss", convert the label in [0,1] to the corresponding id within [0,output_dim-1]
+    if loss == "nllloss":
+        label = np.array([ int( l * output_dim ) if l < 1 else output_dim - 1 for l in label ])
+
+    return label
 
 def calc_weight(pdf, values, xmin, xmax):
     dx = ( xmax - xmin ) / len(pdf)
@@ -70,12 +98,11 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
             data.append(d)
     
     ### read label data ###
-    label = np.loadtxt(fname_comb, skiprows=0, usecols=output_id)
-    label = label[data_ids] # (ndata)
-    label = np.sin( np.deg2rad( label ) )
-    if loss == "nllloss":
-        label = [ int( l * output_dim ) if l < 1 else output_dim - 1 for l in label ]  
-    else:
+    target = np.loadtxt(fname_comb, skiprows=0, usecols=output_id)
+    target = target[data_ids] # (ndata)
+    label = target_to_label(target, output_dim=output_dim, loss=loss)
+
+    if loss != "nllloss":
         if len(np.shape(label)) == 1:
             label = label.reshape(-1, 1) #(ndata, 1) within [0,1]
         if np.shape(label)[1] != output_dim:

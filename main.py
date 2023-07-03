@@ -179,12 +179,9 @@ def train(device):
         with open(fname, "w") as f:
             for i, (ll, oo) in enumerate(zip(val_label, output)):
                 if args.loss == "nllloss":
-                    id_max = torch.argmax(oo)
-                    pred = (id_max + 0.5) / args.output_dim 
-                    true = (ll + 0.5) / output_dim 
-                else:
-                    pred = oo 
-                    true = ll 
+                    oo = torch.argmax(oo)
+                pred = label_to_target(oo, output_dim=args.output_dim, loss=args.loss)
+                true = label_to_target(ll, output_dim=args.output_dim, loss=args.loss)
                 print(true.item(), pred.item(), file=f)
         print(f"# output {fname}", file=sys.stderr)
 
@@ -239,12 +236,9 @@ def test(device):
 
             output = model(dd)
             if args.loss == "nllloss":
-                id_max = torch.argmax(output)
-                pred = (id_max + 0.5) / args.output_dim
-                true = (ll + 0.5) / args.output_dim
-            else:
-                pred = output 
-                true = ll 
+                output = torch.argmax(output)
+            pred = label_to_target(output, output_dim=args.output_dim, loss=args.loss)
+            true = label_to_target(ll, output_dim=args.output_dim, loss=args.loss)
             print(true.item(), pred.item(), file=f)
 
             del dd, ll, output
