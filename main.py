@@ -21,6 +21,7 @@ parser.add_argument("--isTrain", dest="isTrain", action='store_true', help="trai
 parser.add_argument("--data_dir", dest="data_dir", default="./Data_analysis", help="Root directory of training dataset")
 parser.add_argument("--test_dir", dest="test_dir", default="./test_data", help="Root directory of test data")
 parser.add_argument("--ndata", dest="ndata", type=int, default=10, help="the number of data")
+parser.add_argument("--nrea_noise", dest="nrea_noise", type=int, default=1, help="the number of data")
 parser.add_argument("--model_dir", dest="model_dir", default="./Model", help="Root directory to save learned model parameters")
 parser.add_argument("--output_id", dest="output_id", nargs="+", type=int, default=13, help="the column number in Combinations.txt. You can put multiple ids.")
 
@@ -29,7 +30,7 @@ parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.tx
 parser.add_argument("--n_feature", dest="n_feature", type=int, default=1, help="number of input elements")
 parser.add_argument("--seq_length", dest="seq_length", type=int, default=45412, help="length of the sequence to input into RNN")
 parser.add_argument("--hidden_dim", dest="hidden_dim", type=int, default=32, help="number of NN nodes")
-parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, help="the output dimension")
+parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, help="the output dimension for nllloss. Not used for the other loss functions")
 parser.add_argument("--n_layer", dest="n_layer", type=int, default=5, help="number of NN layers")
 parser.add_argument("--r_drop", dest="r_drop", type=float, default=0.0, help="dropout rate")
 parser.add_argument("--batch_size", dest="batch_size", type=int, default=4, help="batch size")
@@ -76,29 +77,33 @@ def update_learning_rate(optimizer, scheduler):
 
 def train(device):
 
-    ### define loss function ###
+    n_feature_out = 1 if isinstance(args.output_id, int) else len(args.output_id)
 
+    ### define loss function ###
     if args.loss == "nllloss":
         loss_func = nn.NLLLoss(reduction="mean")
         if args.output_dim < 2:
             print("Error: output_dim should be greater than 1 for NLLLoss", file=sys.stderr)
             sys.exit(1)
-    elif args.loss == "l1norm":
-        loss_func = nn.L1Loss(reduction="mean")
-        odim = 1 if isinstance(args.output_id, int) else len(args.output_id)
-        if odim != args.output_dim:
-            print("Warning: inconsistent output_dim. Use output_dim = {:d}".format(odim), file=sys.stderr)
-            args.output_dim = odim
     else:
-        print("Error: unknown loss", file=sys.stderr)
-        sys.exit(1)
+
+        reduction = "mean"
+        if "weighted" in args.loss:
+            reduction = "none"
+
+        if "l1norm" in args.loss:
+            loss_func = nn.L1Loss(reduction=reduction)
+        elif "bce" in args.loss:
+            loss_func = nn.BCELoss(reduction=reduction)
+        else:
+            print("Error: unknown loss", file=sys.stderr)
+            sys.exit(1)
 
     print( f"# loss function: {args.loss}")
 
 
     ### define network and optimizer ###
-    model = MyModel(args)
-
+    model = MyModel(args) 
     print(model)
     summary( model, input_size=(args.batch_size, args.seq_length, args.n_feature), col_names=["output_size", "num_params"])
 
@@ -115,7 +120,7 @@ def train(device):
 
     ### load training and validation data ###
     norm_params = np.loadtxt(args.fname_norm)
-    train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, r_train=0.9, shuffle=True)
+    train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=0.9, shuffle=True)
     fname_comb = f"{args.data_dir}/Combinations.txt"
 
     data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
@@ -126,6 +131,15 @@ def train(device):
     
     ntrain = label.size(dim = 0)
 
+    if "weighted" in args.loss:
+        nbin = 20
+        pdf = torch.histc(label, bins=nbin, min=0, max=0)
+        pdf = pdf / ntrain
+        pdf.to(device)
+        hist_min = label.min()
+        hist_max = label.max()
+        print_pdf(pdf, hist_min, hist_max)
+
     ### training ###
     idx = 0
     n_per_epoch = float( int( ntrain / args.batch_size ) )
@@ -135,6 +149,7 @@ def train(device):
     with open(fout, "w") as f:
         print("#idx loss loss_val", file=f)
     for ee in tqdm(range(args.epoch + args.epoch_decay), file=sys.stderr):
+        #for ee in range(args.epoch + args.epoch_decay):
         if ee != 0:
             update_learning_rate(optimizer, scheduler)
         for i, (dd, ll) in enumerate(train_loader):
@@ -142,7 +157,6 @@ def train(device):
             dd = dd.to(device)
             ll = ll.to(device)
             output = model(dd)
-            print(ll)
 
             model.eval()
             with torch.no_grad():
@@ -150,10 +164,11 @@ def train(device):
             model.train()
 
             if "weighted" in args.loss:
-                weights = w1 * ll + w0 * ( 1. - ll )
-                weights_val = w1 * val_label + w0 * ( 1. - val_label )
+                weights = calc_weight(pdf, output, hist_min, hist_max).to(device)
+                weights_val = calc_weight(pdf, output_val, hist_min, hist_max).to(device) 
                 loss = torch.mean( nbin * weights / weights.sum() * loss_func(output, ll) )
                 loss_val = torch.mean( nbin * weights_val / weights_val.sum() * loss_func(output_val, val_label) )
+                del weights, weights_val
             else:
                 loss = loss_func(output, ll)
                 loss_val = loss_func(output_val, val_label)
@@ -174,15 +189,19 @@ def train(device):
     ### print validation result ###
     with torch.no_grad():
         output = model(val_data)
-
         fname = "{}/val.txt".format(args.model_dir)
         with open(fname, "w") as f:
             for i, (ll, oo) in enumerate(zip(val_label, output)):
                 if args.loss == "nllloss":
-                    oo = torch.argmax(oo)
-                pred = label_to_target(oo, output_dim=args.output_dim, loss=args.loss)
-                true = label_to_target(ll, output_dim=args.output_dim, loss=args.loss)
-                print(true.item(), pred.item(), file=f)
+                    oo = torch.argmax(oo, dim=0)
+
+                pred = denormalization(oo, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+                true = denormalization(ll, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+
+                for j in range(n_feature_out):
+                    print(true[0,j].item(), pred[0,j].item(), end=" ",  file=f)
+                print("", file=f)
+
         print(f"# output {fname}", file=sys.stderr)
 
         if args.loss == "nllloss":
@@ -190,8 +209,34 @@ def train(device):
                 fname = "{}/val_dist{:d}.txt".format(args.model_dir, i)
                 with open(fname, "w") as f:
                     for iclass in range(args.output_dim):
-                        print((iclass+0.5)/args.output_dim, oo[iclass].item(), file=f)
+                        print((iclass+0.5)/args.output_dim, end=" ", file=f)
+                        for j in range(n_feature_out):
+                            print(oo[iclass,j].item(), end=" ", file=f)
+                        print("", file=f)
                 print(f"# output {fname}", file=sys.stderr)
+
+        if args.model == "BNN":
+            #model.unfreeze()
+
+            output_list = []
+
+            true = denormalization(val_label, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+            for i in range(100):
+                output = model(val_data)
+                if args.loss == "nllloss":
+                    output = torch.argmax(output, dim=1)
+                output = denormalization(output, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+                output_list.append(output)
+            pred = torch.mean(output_list, axis=0)
+            pred_std = torch.std(output_list, axis=0)
+
+            fname = "{}/val_bnn.txt".format(args.model_dir)
+            with open(fname, "w") as f:
+                for i in range(len(val_data)):
+                    for j in range(n_feature_out):
+                        print(true[i,j].item(), pred[i,j].item(), pred_std[i,j].item(), file=f)
+            print(f"# output {fname}", file=sys.stderr)
+
 
     ### save model ###
     fsave = "{}/model.pth".format(args.model_dir)
@@ -205,11 +250,7 @@ def train(device):
 ####################################################
 def test(device):
 
-    if args.loss == "l1norm":
-        odim = 1 if isinstance(args.output_id, int) else len(args.output_id)
-        if odim != args.output_dim:
-            print("Warning: inconsistent output_dim. Use output_dim = {:d}".format(odim), file=sys.stderr)
-            args.output_dim = odim
+    n_feature_out = 1 if isinstance(args.output_id, int) else len(args.output_id)
 
     ### define network ###
     model = MyModel(args)
@@ -236,10 +277,12 @@ def test(device):
 
             output = model(dd)
             if args.loss == "nllloss":
-                output = torch.argmax(output)
-            pred = label_to_target(output, output_dim=args.output_dim, loss=args.loss)
-            true = label_to_target(ll, output_dim=args.output_dim, loss=args.loss)
-            print(true.item(), pred.item(), file=f)
+                output = torch.argmax(output, dim=1)
+            pred = denormalization(output, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+            true = denormalization(ll, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+            for j in range(n_feature_out):
+                print(true[0,j].item(), pred[0,j].item(), end=" ", file=f)
+            print("", file=f)
 
             del dd, ll, output
             torch.cuda.empty_cache()

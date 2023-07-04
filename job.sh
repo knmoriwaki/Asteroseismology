@@ -1,5 +1,8 @@
 #!/bin/sh
 
+nohup ./sub.sh > temp &
+
+<< COMMENT
 for hidden_dim in 32 128
 do
 	for batch_size in 4 128
@@ -8,6 +11,7 @@ do
 		./sub.sh $hidden_dim $batch_size $lr 
 	done
 done
+COMMENT
 
 
 	

@@ -5,18 +5,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torchhk import transform_model
+import torchbnn as bnn
+
 def MyModel(args):
+
+    n_feature_out = 1 if isinstance(args.output_id, int) else len(args.output_id)
+
     if args.loss == "nllloss":
         last_act = nn.LogSoftmax(dim=1)
     else:
+        args.output_dim = 1
         last_act = nn.Sigmoid() 
 
     if args.model == "RNN":
-        model = RecurrentNet(input_dim=args.n_feature, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, last_act=last_act)
+        model = RecurrentNet(n_feature_in=args.n_feature, n_feature_out=n_feature_out, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, last_act=last_act)
     elif args.model == "CNN":
-        model = ConvNet(input_dim=args.n_feature, seq_length=args.seq_length, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
+        model = ConvNet(n_feature_in=args.n_feature, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
     elif args.model == "BNN":
-        model = ConvNet(input_dim=args.n_feature, seq_length=args.seq_length, hidden_dim=args.hidden_dim, output_dim=args.output_dim, n_layer=args.n_layer, last_act=last_act)
+        if args.loss == "nllloss":
+            print("Error: The current version does not allow nllloss for BNN", file=sys.stderr)
+            sys.exit(1)
+        model = ConvNet(n_feature_in=args.n_feature, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
         transform_model(model, nn.Conv2d, bnn.BayesConv2d, 
             args={"prior_mu":0, "prior_sigma":0.1, "in_channels" : ".in_channels",
                   "out_channels" : ".out_channels", "kernel_size" : ".kernel_size",
@@ -65,48 +75,57 @@ class Conv1dBlock(nn.Module):
 
 class RecurrentNet(nn.Module):
 
-    def __init__(self, input_dim=8, hidden_dim=32, output_dim=1, n_layer=1, nonlinearity="tanh", r_drop=0, last_act=nn.LogSoftmax(dim=1)):
+    def __init__(self, n_feature_in=8, n_feature_out=1, seq_length_out=10, hidden_dim=32, n_layer=1, nonlinearity="tanh", r_drop=0, last_act=nn.LogSoftmax(dim=1)):
         super().__init__()
 
-        self.output_dim = output_dim
-        self.hidden_dim = hidden_dim
-        self.n_layer = n_layer
+        self.seq_length_out = seq_length_out
 
-        self.rnn = nn.RNN(input_dim, hidden_dim, n_layer, nonlinearity=nonlinearity, batch_first=True, dropout=r_drop, bidirectional=False) 
+        self.rnn = nn.RNN(n_feature_in, hidden_dim, n_layer, nonlinearity=nonlinearity, batch_first=True, dropout=r_drop, bidirectional=False) 
         self.linear1 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, output_dim)
+        self.linear2 = nn.Linear(hidden_dim, seq_length_out*n_feature_out)
         self.output_act = last_act
 
     def forward(self, x):
-        ## x: (batch, seq, input_dim)
+        batch_size = x.size(0)
+        ## x: (batch, seq, n_feature_in)
 
         out, h_last = self.rnn(x)
         ## out: (batch, seq, hidden_dim)
         ## h_last: (n_layer, batch, hidden_dim)
 
-        out = out[:,-1,:].contiguous().view(-1, self.hidden_dim)
+        out = out[:,-1,:].contiguous().view(batch_size, -1)
         ## out: (batch, hidden_dim)
 
         out = self.linear1(out)
         out = self.linear2(out)
         out = self.output_act(out)
-        ## out: (batch, output_dim)
+        ## out: (batch, seq_length_out*n_feature_out)
+        
+        if seq_length_out != 1:
+            out = out.reshape(batch_size, self.seq_length_out, -1)
+            ## out: (batch, seq_length_out, n_feature_out)
 
         return out
 
 class ConvNet(nn.Module):
 
-    def __init__(self, input_dim=8, seq_length=10, hidden_dim=32, output_dim=1, n_layer=4, kernel_size=5, r_drop=0, last_act=nn.LogSoftmax(dim=1)):
+    def __init__(self, n_feature_in=8, n_feature_out=1, seq_length=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=5, r_drop=0, last_act=nn.LogSoftmax(dim=1)):
         super().__init__()
+
+        self.seq_length_out = seq_length_out
 
         padding = int( kernel_size / 2 )
 
-        input_dims = [ input_dim ] + [ hidden_dim * 2**i for i in range(n_layer-1) ]
-        output_dims = [ hidden_dim * 2**i for i in range(n_layer) ]
+        input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
+        output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
         if n_layer == 1:
             dropout_rates = [ r_drop ]
+        elif n_layer == 2:
+            dropout_rates = [ 0, r_drop ]
         else:
+            dropout_rates = [0] + [ r_drop for i in range(n_layer-2) ] + [0]
             dropout_rates = [0] + [ r_drop for i in range(n_layer-1) ] 
+
         self.blocks = nn.ModuleList([
             Conv1dBlock(nin=i, nout=j, stride=2, kernel_size=kernel_size, padding=padding, r_drop=r)
             for i, j, r in zip(input_dims, output_dims, dropout_rates) 
@@ -117,7 +136,7 @@ class ConvNet(nn.Module):
         for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
         final_dim = tmp * output_dims[-1]
         
-        self.linear = nn.Linear(final_dim, output_dim)
+        self.linear = nn.Linear(final_dim, seq_length_out*n_feature_out)
         self.output_act = last_act
 
     def forward(self, x):
@@ -135,6 +154,12 @@ class ConvNet(nn.Module):
         ## x: (batch, hidden_dim*seq/2)
 
         x = self.linear(x)
+        ## x: (batch, seq_length_out*n_feature_out)
+
+        if self.seq_length_out != 1:
+            x = x.reshape(batch_size, self.seq_length_out, -1)
+            ## x: (batch, seq_length_out, n_feature_out) 
+
         x = self.output_act(x)
 
         return x
