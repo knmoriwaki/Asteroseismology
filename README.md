@@ -14,7 +14,6 @@ Install the following libraries with `pip`.
 - torchbnn
 - pandas
 - seaborn
-- sklearn
 - scikit-learn
 - tqdm
 - matplotlib
@@ -50,7 +49,7 @@ You can check the model structure in the output file at `./tmp`
 
 - Input shape: (batch_size, seq_length, n_feature)
 
-- Output shape: (batch_size, output_dim)
+- Output shape: (batch_size, n_feature_out=len(output_id)
 
 
 Loss functions:
