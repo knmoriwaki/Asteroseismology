@@ -118,9 +118,6 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     if loss == "nllloss":
         target = np.array([ [ int( t * output_dim ) if t < 1 else output_dim -1 for t in tt ] for tt in target ])
         # (ndata, n_feature_out)
-        if n_feature_out == 1:
-            target = np.squeeze(target, 2) 
-            # ( ndata )
 
     if np.shape(data)[1] != seq_length:
         print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)

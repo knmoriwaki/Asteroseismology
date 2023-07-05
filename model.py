@@ -43,18 +43,20 @@ def MyModel(args):
 
 class Conv1dBlock(nn.Module):
 
-    def __init__(self, nin=32, nout=32, kernel_size=5, stride=2, padding="same", r_drop=0):
+    def __init__(self, nin=32, nout=32, kernel_size=5, stride=2, padding="same", r_drop=0, bn=False):
         super().__init__()
-        self.conv = nn.Conv2d(nin, nout, kernel_size=(kernel_size,1), stride=(stride,1), padding=(padding,0))
+
+        self.conv = nn.Conv1d(nin, nout, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.bn = nn.BatchNorm1d(nout)
         self.drop = nn.Dropout(r_drop)
         self.act = nn.LeakyReLU()
 
     def forward(self, x):
-        x = x.unsqueeze(3)
         x = self.conv(x)
+        if self.bn:
+            x = self.bn(x)
         x = self.drop(x)
         x = self.act(x)
-        x = x.squeeze(3)
         return x
 
 """
@@ -116,21 +118,22 @@ class ConvNet(nn.Module):
 
         padding = int( kernel_size / 2 )
 
-        input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
-        output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
+        input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 32) for i in range(n_layer-1) ]
+        output_dims = [ hidden_dim * min(2**i, 32) for i in range(n_layer) ]
+        batch_norms = [ True for i in range(n_layer-1) ]
         if n_layer == 1:
             dropout_rates = [ r_drop ]
         elif n_layer == 2:
             dropout_rates = [ 0, r_drop ]
         else:
-            dropout_rates = [0] + [ r_drop for i in range(n_layer-2) ] + [0]
             dropout_rates = [0] + [ r_drop for i in range(n_layer-1) ] 
 
         self.blocks = nn.ModuleList([
-            Conv1dBlock(nin=i, nout=j, stride=2, kernel_size=kernel_size, padding=padding, r_drop=r)
-            for i, j, r in zip(input_dims, output_dims, dropout_rates) 
+            Conv1dBlock(nin=i, nout=j, stride=2, kernel_size=kernel_size, padding=padding, r_drop=r, bn=bn)
+            for i, j, r, bn in zip(input_dims, output_dims, dropout_rates, batch_norms) 
             ])
-        ### for seq_length = 10 with 
+
+        ### e.g., for seq_length = 10 with 
         ### (input_dim, 10) -> (hidden_dim*2, 5) -> (hidden_dim*4, 3) -> (hidden_dim*8, 2) 
         tmp = seq_length
         for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
