@@ -32,7 +32,7 @@ If you use `nllloss` as the loss function, then the resulting pdf will cover the
 ./sub.sh
 ```
 
-- You can change the parameters in run.sh. For the output_id, you can choose multiple ids (column number) by, e.g., `./sub.sh --output_id 1 2 3 --isTrain`.
+- You can change the parameters in run.sh. For the output_id, you can choose multiple ids (column number) by, e.g., `python main.py --output_id 1 2 3 --isTrain`.
 
 
 - After the training, use plot.ipynb to check the model performance. 
@@ -49,12 +49,14 @@ You can check the model structure in the output file at `./tmp`
 
 - Input shape: (batch_size, seq_length, n_feature)
 
-- Output shape: (batch_size, n_feature_out=len(output_id)
+- Output shape: (batch_size, n_feature_out=len(output_id))
 
 
 Loss functions:
 
 - NLLLoss: set output_dim > 1. This parameter is not used for the other loss functions.
+
+- L1norm
 
 ## References
 
