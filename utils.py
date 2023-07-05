@@ -77,7 +77,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     if len(np.shape(norm_params)) == 1:
         norm_params = norm_params.reshape(1,-1)
 
-    print(f"Reading files... ", file=sys.stderr)
+    print(f"Loading files... ", file=sys.stderr)
 
     ### read input data ###
     data = []
@@ -95,10 +95,8 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
 
     ### read target data ###
     n_feature_out = len(output_id)
-    target = np.loadtxt(fname_comb, skiprows=5, usecols=output_id)
+    target = np.loadtxt(fname_comb, skiprows=5, usecols=output_id, ndmin=2)
     target = target[data_ids] # (ndata, n_feature_out)
-    if n_feature_out == 1:
-        target = target.reshape(-1,1) # (ndata, n_feature_out=1)
 
     # if you want to convert it to sin, do so here by, e.g., 
     # target[:,0] = np.sin( np.deg2rad( target[:,0] ))
@@ -109,11 +107,13 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
         for i in range(n_feature):
             data[:,:,i] -= norm_params[i,0]
             if norm_params[i,1] > 0: data[:,:,i] /= norm_params[i,1]
+            print("# input feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(i, norm_params[i,0], norm_params[i,1]))
         ## normalize target data
         for ii in range(n_feature_out):
             i = n_feature + ii
             target[:,ii] -= norm_params[i,0]
             if norm_params[i,1] > 0: target[:,ii] /= norm_params[i,1]
+            print("# output feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(ii, norm_params[i,0], norm_params[i,1]))
 
     if loss == "nllloss":
         target = np.array([ [ int( t * output_dim ) if t < 1 else output_dim -1 for t in tt ] for tt in target ])
