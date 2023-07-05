@@ -46,15 +46,17 @@ class Conv1dBlock(nn.Module):
     def __init__(self, nin=32, nout=32, kernel_size=5, stride=2, padding="same", r_drop=0, bn=False):
         super().__init__()
 
+        self.bn = bn
+
         self.conv = nn.Conv1d(nin, nout, kernel_size=kernel_size, stride=stride, padding=padding)
-        self.bn = nn.BatchNorm1d(nout)
+        self.batch_norm = nn.BatchNorm1d(nout)
         self.drop = nn.Dropout(r_drop)
         self.act = nn.LeakyReLU()
 
     def forward(self, x):
         x = self.conv(x)
         if self.bn:
-            x = self.bn(x)
+            x = self.batch_norm(x)
         x = self.drop(x)
         x = self.act(x)
         return x
