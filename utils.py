@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 from tqdm import tqdm
 
-def denormalization(target, norm_params, n_feature_in, n_feature_out, output_dim, loss, batch=None):
+def denorm(target, norm_params, n_feature_in, n_feature_out, output_dim, loss, batch=None):
 
     ## target should have a shape (batch, n_feature_out)
     target = target.reshape(-1, n_feature_out)
@@ -29,16 +29,24 @@ def denormalization(target, norm_params, n_feature_in, n_feature_out, output_dim
     return target
 
 def calc_weight(pdf, values, xmin, xmax):
-    dx = ( xmax - xmin ) / len(pdf)
+    n_data = len(values)
+    n_feature = len(values[0])
 
-    weights = torch.zeros(len(values))
-    for i, x in enumerate(values):
-        ix = int( ( x - xmin ) / dx )
-        ix = np.clip(ix, 0, len(pdf)-1)
-        weights[i] = 1. - pdf[ix]
-        weights_tot += weights[i]
+    weights = torch.zeros(n_data, n_feature)
+    for j in range(n_feature):
+        dx = ( xmax[j] - xmin[j] ) / len(pdf)
 
-    return torch.reshape(weights/weights_tot, (-1,1))
+        weights_tot = 0.0
+        for i, x in enumerate(values):
+            ix = int( ( x - xmin[j] ) / dx )
+            ix = np.clip(ix, 0, len(pdf)-1)
+            weights[i][j] = 1. - pdf[ix][j]
+            weights_tot += weights[i][j]
+
+        for i in range(n_data):
+            weights[i][j] /= weights_tot
+
+    return weights
 
 def print_pdf(pdf, xmin, xmax):
     dx = (xmax - xmin) / len(pdf)
@@ -72,7 +80,7 @@ def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_t
 
     return fnames_train, fnames_val, ids_train, ids_val
 
-def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, output_id=[13], n_feature=1, seq_length=10, norm_params=None, loss="l1norm", device="cpu"):
+def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, input_id=[1], output_id=[13], seq_length=10, norm_params=None, loss="l1norm", device="cpu"):
 
     if len(np.shape(norm_params)) == 1:
         norm_params = norm_params.reshape(1,-1)
@@ -80,6 +88,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     print(f"Loading files... ", file=sys.stderr)
 
     ### read input data ###
+    n_feature_in = len(input_id)
     data = []
     for f in fnames:
         if os.path.exists(f) == False: 
@@ -87,10 +96,10 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
             sys.exit(1)
 
         input_data = np.loadtxt(f)
-        d = input_data[:,1] ## read "spec"
-        d = d.reshape(seq_length, n_feature) #(seq_length, n_feature=1)
+        d = input_data[:,input_id] ## read 1: noisy spec, 2: noiseless spec
+        d = d.reshape(seq_length, n_feature_in) #(seq_length, n_feature_in=1)
             
-        data.append(d) #( ndata, seq_length, n_feature)
+        data.append(d) #( ndata, seq_length, n_feature_in)
     data = np.array(data)
 
     ### read target data ###
@@ -99,18 +108,18 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     target = target[data_ids] # (ndata, n_feature_out)
 
     # if you want to convert it to sin, do so here by, e.g., 
-    # target[:,0] = np.sin( np.deg2rad( target[:,0] ))
+    #target[:,0] = np.sin( np.deg2rad( target[:,0] ))
     # in this case, do not forget to change the normalization parameter accordingly
 
     if norm_params is not None:
         ## normalize input data
-        for i in range(n_feature):
+        for i in range(n_feature_in):
             data[:,:,i] -= norm_params[i,0]
             if norm_params[i,1] > 0: data[:,:,i] /= norm_params[i,1]
             print("# input feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(i, norm_params[i,0], norm_params[i,1]))
         ## normalize target data
         for ii in range(n_feature_out):
-            i = n_feature + ii
+            i = n_feature_in + ii
             target[:,ii] -= norm_params[i,0]
             if norm_params[i,1] > 0: target[:,ii] /= norm_params[i,1]
             print("# output feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(ii, norm_params[i,0], norm_params[i,1]))
@@ -123,8 +132,8 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
         print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
         sys.exit(1)
 
-    if np.shape(data)[2] != n_feature:
-        print(f"Error: inconsistent n_feature {np.shape(data)[2]} != {n_feature}", file=sys.stderr)
+    if np.shape(data)[2] != n_feature_in:
+        print(f"Error: inconsistent n_feature_in {np.shape(data)[2]} != {n_feature_in}", file=sys.stderr)
         sys.exit(1)
 
     ### convert the data to torch.tensor ###

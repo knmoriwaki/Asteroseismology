@@ -17,17 +17,20 @@ from tqdm import tqdm
 from utils import *
 
 parser = argparse.ArgumentParser(description="")
+parser.add_argument("--gpu_id", dest="gpu_id", type=int, default=0, help="")
 parser.add_argument("--isTrain", dest="isTrain", action='store_true', help="train or test")
 parser.add_argument("--data_dir", dest="data_dir", default="./Data_analysis", help="Root directory of training dataset")
 parser.add_argument("--test_dir", dest="test_dir", default="./test_data", help="Root directory of test data")
 parser.add_argument("--ndata", dest="ndata", type=int, default=10, help="the number of data")
 parser.add_argument("--nrea_noise", dest="nrea_noise", type=int, default=1, help="the number of data")
-parser.add_argument("--model_dir", dest="model_dir", default="./Model", help="Root directory to save learned model parameters")
-parser.add_argument("--output_id", dest="output_id", nargs="+", type=int, default=13, help="the column number in Combinations.txt. You can put multiple ids.")
+parser.add_argument("--model_dir_save", dest="model_dir_save", default="./Model", help="Root directory to save learned model parameters")
+parser.add_argument("--model_dir_load", dest="model_dir_load", default="./Model", help="Root directory to load learned model parameters")
+parser.add_argument("--input_id", dest="input_id", nargs="+", type=int, default=1, help="the column number(s) in, e.g., 0000000.0.txt.")
+parser.add_argument("--output_id", dest="output_id", nargs="+", type=int, default=13, help="the column number(s) in Combinations.txt. You can put multiple ids.")
 
 parser.add_argument("--model", dest="model", default="NN", help="model")
 parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.txt", help="file name of the normalization parameters")
-parser.add_argument("--n_feature", dest="n_feature", type=int, default=1, help="number of input elements")
+
 parser.add_argument("--seq_length", dest="seq_length", type=int, default=45412, help="length of the sequence to input into RNN")
 parser.add_argument("--hidden_dim", dest="hidden_dim", type=int, default=32, help="number of NN nodes")
 parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, help="the output dimension for nllloss. Not used for the other loss functions")
@@ -38,14 +41,18 @@ parser.add_argument("--epoch", dest="epoch", type=int, default=10, help="trainin
 parser.add_argument("--epoch_decay", dest="epoch_decay", type=int, default=0, help="training epoch")
 parser.add_argument("--lr", dest="lr", type=float, default=1e-3, help="learning rate")
 parser.add_argument("--loss", dest="loss", default="l1norm", help="loss function")
+
+parser.add_argument("--n_freeze_layer", dest="n_freeze_layer", type=int, default=0, help="for transfer learning")
+
 args = parser.parse_args()
 
 def main():
 
-    is_cuda = torch.cuda.is_available()
     random_seed = 1
+
+    is_cuda = torch.cuda.is_available()
     if is_cuda:
-        device = torch.device("cuda:0")
+        device = torch.device("cuda:{:d}".format(args.gpu_id))
 
         torch.cuda.manual_seed(random_seed)
         torch.backends.cudnn.deterministic = True
@@ -58,7 +65,7 @@ def main():
     np.random.seed(random_seed)
 
     if args.isTrain:
-        with open("{}/params.json".format(args.model_dir), mode="a") as f:
+        with open("{}/params.json".format(args.model_dir_save), mode="a") as f:
             json.dump(args.__dict__, f)
         train(device)
     else:
@@ -77,6 +84,7 @@ def update_learning_rate(optimizer, scheduler):
 
 def train(device):
 
+    n_feature_in = 1 if isinstance(args.input_id, int) else len(args.input_id)
     n_feature_out = 1 if isinstance(args.output_id, int) else len(args.output_id)
 
     ### define loss function ###
@@ -102,10 +110,32 @@ def train(device):
     print( f"# loss function: {args.loss}")
 
 
-    ### define network and optimizer ###
+    ### define network ###
     model = MyModel(args) 
+
     print(model)
-    summary( model, input_size=(args.batch_size, args.seq_length, args.n_feature), col_names=["output_size", "num_params"])
+    summary( model, input_size=(args.batch_size, args.seq_length, n_feature_in), col_names=["output_size", "num_params"], device=device)
+
+    if args.n_freeze_layer > 0: ### load network parameters and freeze the first few layers of the network
+        if args.n_freeze_layer > args.n_layer:
+            print("Error: the number of layers to be freezed should be smaller than the original number")
+            sys.exit(1)
+        fmodel = "{}/model.pth".format(args.model_dir_load)
+        model.load_state_dict(torch.load(fmodel))
+        print("# load model from {}".format(fmodel))
+        count = 0
+        for child in model.children():
+            for c in child.children():
+                if count < args.n_freeze_layer:
+                    print("# Freezee parameters of module below")
+                    print(c)
+                    for param in c.parameters():
+                        param.requires_grad = False
+                    count += 1
+
+    model.to(device)
+
+    ### define optimizer ###
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=0) #default: lr=1e-3, betas=(0.9,0.999), eps=1e-8
     def lambda_rule(ee):
@@ -113,7 +143,6 @@ def train(device):
         return lr_l
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
 
-    model.to(device)
 
     print( f"# hidden_dim: {args.hidden_dim}" )
     print( f"# n_layer: {args.n_layer}" )
@@ -123,8 +152,8 @@ def train(device):
     train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=0.9, shuffle=True)
     fname_comb = f"{args.data_dir}/Combinations.txt"
 
-    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
-    val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device)
+    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
+    val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device)
 
     dataset = MyDataset(data, label)
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
@@ -133,18 +162,23 @@ def train(device):
 
     if "weighted" in args.loss:
         nbin = 20
-        pdf = torch.histc(label, bins=nbin, min=0, max=0)
-        pdf = pdf / ntrain
-        pdf.to(device)
-        hist_min = label.min()
-        hist_max = label.max()
-        print_pdf(pdf, hist_min, hist_max)
+        pdf = np.zeros((n_feature_out, nbin))
+        hist_min = np.zeros(n_feature_out)
+        hist_max = np.zeros(n_feature_out)
+        for i in range(n_feature_out):
+            pdf[i] = torch.histc(label[:,i], bins=nbin, min=0, max=0)
+            pdf[i] = pdf[i] / ntrain
+            hist_min[i] = label.min()
+            hist_max[i] = label.max()
+            print_pdf(pdf[i], hist_min[i], hist_max[i])
+        
+        pdf = torch.from_numpy(pdf).to(device)
 
     ### training ###
     idx = 0
     n_per_epoch = float( int( ntrain / args.batch_size ) )
     print("Training...", file=sys.stderr)
-    fout = "{}/log.txt".format(args.model_dir)
+    fout = "{}/log.txt".format(args.model_dir_save)
     print(f"# output {fout}", file=sys.stderr)
     with open(fout, "w") as f:
         print("#idx loss loss_val", file=f)
@@ -189,14 +223,14 @@ def train(device):
     ### print validation result ###
     with torch.no_grad():
         output = model(val_data)
-        fname = "{}/val.txt".format(args.model_dir)
+        fname = "{}/val.txt".format(args.model_dir_save)
         with open(fname, "w") as f:
             for i, (ll, oo) in enumerate(zip(val_label, output)):
                 if args.loss == "nllloss":
                     oo = torch.argmax(oo, dim=0)
 
-                pred = denormalization(oo, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
-                true = denormalization(ll, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+                pred = denorm(oo, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
+                true = denorm(ll, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
 
                 for j in range(n_feature_out):
                     print(true[0,j].item(), pred[0,j].item(), end=" ",  file=f)
@@ -206,7 +240,7 @@ def train(device):
 
         if args.loss == "nllloss":
             for i, oo in enumerate(output):
-                fname = "{}/val_dist{:d}.txt".format(args.model_dir, i)
+                fname = "{}/val_dist{:d}.txt".format(args.model_dir_save, i)
                 with open(fname, "w") as f:
                     for iclass in range(args.output_dim):
                         print((iclass+0.5)/args.output_dim, end=" ", file=f)
@@ -220,12 +254,12 @@ def train(device):
 
             output_list = []
 
-            true = denormalization(val_label, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+            true = denorm(val_label, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
             for i in range(100):
                 output = model(val_data)
                 if args.loss == "nllloss":
                     output = torch.argmax(output, dim=1)
-                output = denormalization(output, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+                output = denorm(output, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
                 output_list.append(output)
             pred = torch.mean(output_list, axis=0)
             pred_std = torch.std(output_list, axis=0)
@@ -239,7 +273,7 @@ def train(device):
 
 
     ### save model ###
-    fsave = "{}/model.pth".format(args.model_dir)
+    fsave = "{}/model.pth".format(args.model_dir_save)
     torch.save(model.state_dict(), fsave)
     print( f"# save {fsave}" )
 
@@ -250,25 +284,26 @@ def train(device):
 ####################################################
 def test(device):
 
+    n_feature_in = 1 if isinstance(args.input_id, int) else len(args.input_id)
     n_feature_out = 1 if isinstance(args.output_id, int) else len(args.output_id)
 
     ### define network ###
     model = MyModel(args)
     model.to(device)
 
-    fmodel = "{}/model.pth".format(args.model_dir)
+    fmodel = "{}/model.pth".format(args.model_dir_load)
     model.load_state_dict(torch.load(fmodel))
     model.eval()
-    print("# load model from {}/model.pth".format(args.model_dir))
+    print("# load model from {}".format(fmodel))
 
     ### load test data ###
     norm_params = np.loadtxt(args.fname_norm)
     _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
     fname_comb = f"{args.test_dir}/Combinations.txt"
-    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, output_id=args.output_id, n_feature=args.n_feature, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
+    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
 
     ### output test result ###
-    fname = "{}/test.txt".format(args.model_dir)
+    fname = "{}/test.txt".format(args.model_dir_save)
     with open(fname, "w") as f:
         for dd, ll in zip(data, label):
 
@@ -278,8 +313,8 @@ def test(device):
             output = model(dd)
             if args.loss == "nllloss":
                 output = torch.argmax(output, dim=1)
-            pred = denormalization(output, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
-            true = denormalization(ll, norm_params, args.n_feature, n_feature_out, args.output_dim, args.loss)
+            pred = denorm(output, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
+            true = denorm(ll, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
             for j in range(n_feature_out):
                 print(true[0,j].item(), pred[0,j].item(), end=" ", file=f)
             print("", file=f)
