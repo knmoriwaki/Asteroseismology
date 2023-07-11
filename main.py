@@ -42,7 +42,8 @@ parser.add_argument("--epoch_decay", dest="epoch_decay", type=int, default=0, he
 parser.add_argument("--lr", dest="lr", type=float, default=1e-3, help="learning rate")
 parser.add_argument("--loss", dest="loss", default="l1norm", help="loss function")
 
-parser.add_argument("--n_freeze_layer", dest="n_freeze_layer", type=int, default=0, help="for transfer learning")
+parser.add_argument("--i_layer_freeze", dest="i_layer_freeze", nargs="+", type=int, default=-1, help="layer numbers (0, 1, ..., n_layer-1) to be freezed. You can freeze multple layers.")
+
 
 args = parser.parse_args()
 
@@ -52,12 +53,13 @@ def main():
 
     is_cuda = torch.cuda.is_available()
     if is_cuda:
-        device = torch.device("cuda:{:d}".format(args.gpu_id))
+        device_name = "cuda:{:d}".format(args.gpu_id)
+        device = torch.device(device_name)
 
         torch.cuda.manual_seed(random_seed)
         torch.backends.cudnn.deterministic = True
 
-        print("# GPU is available")
+        print("# GPU ({}) is available".format(device_name))
     else:
         device = torch.device("cpu")
         print("# GPU not availabe, CPU used")
@@ -116,22 +118,21 @@ def train(device):
     print(model)
     summary( model, input_size=(args.batch_size, args.seq_length, n_feature_in), col_names=["output_size", "num_params"], device=device)
 
-    if args.n_freeze_layer > 0: ### load network parameters and freeze the first few layers of the network
-        if args.n_freeze_layer > args.n_layer:
-            print("Error: the number of layers to be freezed should be smaller than the original number")
-            sys.exit(1)
+    if args.i_layer_freeze != -1: ### load network parameters and freeze the first few layers of the network
+
         fmodel = "{}/model.pth".format(args.model_dir_load)
         model.load_state_dict(torch.load(fmodel))
         print("# load model from {}".format(fmodel))
-        count = 0
+
+        if isinstance(args.i_layer_freeze, int):
+            args.i_layer_freeze = [args.i_layer_freeze]
         for child in model.children():
-            for c in child.children():
-                if count < args.n_freeze_layer:
+            for i, c in enumerate(child.children()):
+                if i in args.i_layer_freeze:
                     print("# Freezee parameters of module below")
                     print(c)
                     for param in c.parameters():
                         param.requires_grad = False
-                    count += 1
 
     model.to(device)
 

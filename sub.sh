@@ -43,15 +43,9 @@ today=`date '+%Y-%m-%d'`
 python main.py --gpu_id 1 --isTrain --data_dir $data_dir --ndata $ndata --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 --nrea_noise $nrea_noise #> ./tmp/out_${today}_${model_base}.log
 echo "# output ./tmp/out_${today}_${model_base}.log"
 
-### transfer learning ###
-input_id=1
-model_dir_new=${model_dir}/tl_id${input_id}
-mkdir -p $model_dir_new
-#python main.py --isTrain --data_dir $data_dir --ndata $ndata --model_dir_load $model_dir --model_dir_save $model_dir_new --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 --nrea_noise $nrea_noise > ./tmp/out_tf_${today}_${model_base}.log
-
 ### test ###
 test_dir=./test_data
 ndata_test=6
 model_file_name=model.pth
-#python main.py --test_dir $test_dir --ndata $ndata_test --model_dir_load $model_dir $model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 1
+#python main.py --gpu_id 1 --test_dir $test_dir --ndata $ndata_test --model_dir_load $model_dir $model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 1
 
