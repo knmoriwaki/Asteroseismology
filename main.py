@@ -22,6 +22,7 @@ parser.add_argument("--isTrain", dest="isTrain", action='store_true', help="trai
 parser.add_argument("--data_dir", dest="data_dir", default="./Data_analysis", help="Root directory of training dataset")
 parser.add_argument("--test_dir", dest="test_dir", default="./test_data", help="Root directory of test data")
 parser.add_argument("--ndata", dest="ndata", type=int, default=10, help="the number of data")
+parser.add_argument("--r_train", dest="r_train", type=float, default=0.9, help="ratio of number of training data to ndata")
 parser.add_argument("--nrea_noise", dest="nrea_noise", type=int, default=1, help="the number of data")
 parser.add_argument("--model_dir_save", dest="model_dir_save", default="./Model", help="Root directory to save learned model parameters")
 parser.add_argument("--model_dir_load", dest="model_dir_load", default="./Model", help="Root directory to load learned model parameters")
@@ -43,6 +44,8 @@ parser.add_argument("--lr", dest="lr", type=float, default=1e-3, help="learning 
 parser.add_argument("--loss", dest="loss", default="l1norm", help="loss function")
 
 parser.add_argument("--i_layer_freeze", dest="i_layer_freeze", nargs="+", type=int, default=-1, help="layer numbers (0, 1, ..., n_layer-1) to be freezed. You can freeze multple layers.")
+
+parser.add_argument("--progress_bar", action="store_true")
 
 
 args = parser.parse_args()
@@ -150,11 +153,11 @@ def train(device):
 
     ### load training and validation data ###
     norm_params = np.loadtxt(args.fname_norm)
-    train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=0.9, shuffle=True)
+    train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=args.r_train, shuffle=True)
     fname_comb = f"{args.data_dir}/../Combinations.txt"
 
-    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
-    val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device)
+    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
+    val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device, pbar=args.progress_bar)
 
     dataset = MyDataset(data, label)
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
@@ -183,8 +186,11 @@ def train(device):
     print(f"# output {fout}", file=sys.stderr)
     with open(fout, "w") as f:
         print("#idx loss loss_val", file=f)
-    for ee in tqdm(range(args.epoch + args.epoch_decay), file=sys.stderr):
-        #for ee in range(args.epoch + args.epoch_decay):
+    
+    elist = range(args.epoch + args.epoch_decay)
+    if args.progress_bar:
+        elist = tqdm(elist, file=sys.stderr)
+    for ee in elist:
         if ee != 0:
             update_learning_rate(optimizer, scheduler)
         for i, (dd, ll) in enumerate(train_loader):
@@ -235,7 +241,7 @@ def train(device):
 
                 for j in range(n_feature_out):
                     print(true[0,j].item(), pred[0,j].item(), end=" ",  file=f)
-                print("", file=f)
+                print(val_ids[i], file=f)
 
         print(f"# output {fname}", file=sys.stderr)
 
@@ -302,12 +308,12 @@ def test(device):
     norm_params = np.loadtxt(args.fname_norm)
     _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
     fname_comb = f"{args.test_dir}/../Combinations.txt"
-    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
+    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
 
     ### output test result ###
     fname = "{}/test.txt".format(args.model_dir_save)
     with open(fname, "w") as f:
-        for dd, ll in zip(data, label):
+        for i, (dd, ll) in enumerate(zip(data, label)):
 
             dd = torch.unsqueeze(dd, dim=0).to(device)
             ll = torch.unsqueeze(ll, dim=0).to(device)
@@ -315,14 +321,17 @@ def test(device):
             output = model(dd)
             if args.loss == "nllloss":
                 output = torch.argmax(output, dim=1)
+
             pred = denorm(output, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
             true = denorm(ll, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
+
             for j in range(n_feature_out):
                 print(true[0,j].item(), pred[0,j].item(), end=" ", file=f)
-            print("", file=f)
+            print(test_ids[i], file=f)
 
             del dd, ll, output
             torch.cuda.empty_cache()
+
     print(f"output {fname}", file=sys.stderr)
 
 if __name__ == "__main__":

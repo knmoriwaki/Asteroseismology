@@ -80,7 +80,7 @@ def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_t
 
     return fnames_train, fnames_val, ids_train, ids_val
 
-def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, input_id=[1], output_id=[13], seq_length=10, norm_params=None, loss="l1norm", device="cpu"):
+def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, input_id=[1], output_id=[13], seq_length=10, norm_params=None, loss="l1norm", device="cpu", pbar=False):
 
     if len(np.shape(norm_params)) == 1:
         norm_params = norm_params.reshape(1,-1)
@@ -90,16 +90,24 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     ### read input data ###
     n_feature_in = len(input_id)
     data = []
-    for f in fnames:
+    flist = tqdm(fnames, file=sys.stderr) if pbar else fnames
+    count = 0
+    for f in flist:
         if os.path.exists(f) == False: 
-            print(f"# Error: file not found {f}", file=sys.stderr) 
-            sys.exit(1)
+            #print(f"# Error: file not found {f}", file=sys.stderr) 
+            #sys.exit(1)
+            print(f"# Warning: file not found {f}", file=sys.stderr)
+            del data_ids[count]
+            continue
+        else:
+            count += 1
 
         input_data = np.loadtxt(f)
         d = input_data[:,input_id] ## read 1: noisy spec, 2: noiseless spec
         d = d.reshape(seq_length, n_feature_in) #(seq_length, n_feature_in=1)
             
         data.append(d) #( ndata, seq_length, n_feature_in)
+
     data = np.array(data)
 
     ### read target data ###
