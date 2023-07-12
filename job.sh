@@ -1,17 +1,6 @@
 #!/bin/sh
 
-nohup ./sub.sh > temp &
-
-<< COMMENT
-for hidden_dim in 32 128
-do
-	for batch_size in 4 128
-	do
-		lr=`bc <<< "scale=5; 0.00025*$batch_size"`
-		./sub.sh $hidden_dim $batch_size $lr 
-	done
-done
-COMMENT
+nohup ./sub.sh > ./tmp/out1.txt 2>&1 &
+#nohup ./sub_freeze.sh > ./tmp/out_freeze.txt 2>&1 &
 
 
-	

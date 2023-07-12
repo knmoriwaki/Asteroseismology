@@ -102,7 +102,7 @@ def train(device):
             reduction = "none"
 
         if "l1norm" in args.loss:
-            loss_func = nn.L1Loss(reduction=reduction)
+            loss_func = nn.SmoothL1Loss(reduction=reduction)
         elif "bce" in args.loss:
             loss_func = nn.BCELoss(reduction=reduction)
         else:
@@ -116,9 +116,9 @@ def train(device):
     model = MyModel(args) 
 
     print(model)
-    summary( model, input_size=(args.batch_size, args.seq_length, n_feature_in), col_names=["output_size", "num_params"], device=device)
+    #summary( model, input_size=(args.batch_size, args.seq_length, n_feature_in), col_names=["output_size", "num_params"], device=device)
 
-    if args.i_layer_freeze != -1: ### load network parameters and freeze the first few layers of the network
+    if args.model_dir_load != args.model_dir_save and args.model_dir_load != "./Model": ### load network parameters and freeze the first few layers of the network
 
         fmodel = "{}/model.pth".format(args.model_dir_load)
         model.load_state_dict(torch.load(fmodel))
@@ -151,7 +151,7 @@ def train(device):
     ### load training and validation data ###
     norm_params = np.loadtxt(args.fname_norm)
     train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=0.9, shuffle=True)
-    fname_comb = f"{args.data_dir}/Combinations.txt"
+    fname_comb = f"{args.data_dir}/../Combinations.txt"
 
     data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
     val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device)
@@ -253,19 +253,20 @@ def train(device):
         if args.model == "BNN":
             #model.unfreeze()
 
-            output_list = []
 
             true = denorm(val_label, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
-            for i in range(100):
+            nsample = 100
+            output_list = torch.zeros(nsample, len(val_data), n_feature_out)
+            for i in range(nsample):
                 output = model(val_data)
                 if args.loss == "nllloss":
                     output = torch.argmax(output, dim=1)
                 output = denorm(output, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
-                output_list.append(output)
+                output_list[i] = output
             pred = torch.mean(output_list, axis=0)
             pred_std = torch.std(output_list, axis=0)
 
-            fname = "{}/val_bnn.txt".format(args.model_dir)
+            fname = "{}/val_bnn.txt".format(args.model_dir_save)
             with open(fname, "w") as f:
                 for i in range(len(val_data)):
                     for j in range(n_feature_out):
@@ -300,7 +301,7 @@ def test(device):
     ### load test data ###
     norm_params = np.loadtxt(args.fname_norm)
     _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
-    fname_comb = f"{args.test_dir}/Combinations.txt"
+    fname_comb = f"{args.test_dir}/../Combinations.txt"
     data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None)
 
     ### output test result ###
