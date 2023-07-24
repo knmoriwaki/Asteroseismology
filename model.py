@@ -402,7 +402,7 @@ class Conv2dNet(nn.Module):
 
         self.blocks = nn.ModuleList([
             block(nin=i, nout=j, stride=2, kernel_size=ks, padding=padding, bn=bn, r_drop=r)
-            for i, j, ks, bn, r in zip(input_dims, output_dims, strides, kernel_sizes, batch_norms, dropout_rates)
+            for i, j, ks, bn, r in zip(input_dims, output_dims, kernel_sizes, batch_norms, dropout_rates)
             ])
 
         final_dim = wtmp * htmp * output_dims[-1]

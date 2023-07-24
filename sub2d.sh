@@ -22,7 +22,7 @@ r_train=0.99
 model=CNN
 
 hidden_dim=16
-n_layer=6 
+n_layer=8
 r_drop=0
 
 ### training parameters ###
