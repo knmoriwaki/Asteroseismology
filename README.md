@@ -32,9 +32,14 @@ If you use `nllloss` as the loss function, then the resulting pdf will cover the
 ./sub.sh
 ```
 
-- You can change the parameters in run.sh. For the output_id, you can choose multiple ids (column number) by, e.g., `python main.py --output_id 1 2 3 --isTrain`.
+- If you want to train on 2D data, run
+```
+./sub2.sh
+```
+You need to set both seq_length and seq_length_2 > 0.
 
-- If you want to train on 2D data, set both seq_length and seq_length_2 > 0. 
+- You can change the parameters in sub.sh. For the output_id, you can choose multiple ids (column number) by, e.g., `python main.py --output_id 1 2 3 --isTrain`.
+
 
 
 - After the training, use plot.ipynb to check the model performance. 
