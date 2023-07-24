@@ -47,16 +47,10 @@ Validation output:
 You can check the model structure in the output file at `./tmp`
 
 
-- Input shape: (batch_size, seq_length, n_feature)
+- Input shape: (batch_size, seq_length, len(input_id))
 
-- Output shape: (batch_size, n_feature_out=len(output_id))
+- Output shape: (batch_size, output_dim, len(output_id)) for NLLLoss, (batch_size, len(output_id)) for the other losses
 
-
-Loss functions:
-
-- NLLLoss: set output_dim > 1. This parameter is not used for the other loss functions.
-
-- L1norm
 
 ## References
 

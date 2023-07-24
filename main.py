@@ -20,6 +20,7 @@ parser = argparse.ArgumentParser(description="")
 parser.add_argument("--gpu_id", dest="gpu_id", type=int, default=0, help="")
 parser.add_argument("--isTrain", dest="isTrain", action='store_true', help="train or test")
 parser.add_argument("--data_dir", dest="data_dir", default="./Data_analysis", help="Root directory of training dataset")
+parser.add_argument("--comb_dir", dest="comb_dir", default="./Data_analysis", help="Root directory where you have Combinations.txt")
 parser.add_argument("--test_dir", dest="test_dir", default="./test_data", help="Root directory of test data")
 parser.add_argument("--ndata", dest="ndata", type=int, default=10, help="the number of data")
 parser.add_argument("--r_train", dest="r_train", type=float, default=0.9, help="ratio of number of training data to ndata")
@@ -33,6 +34,7 @@ parser.add_argument("--model", dest="model", default="NN", help="model")
 parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.txt", help="file name of the normalization parameters")
 
 parser.add_argument("--seq_length", dest="seq_length", type=int, default=45412, help="length of the sequence to input into RNN")
+parser.add_argument("--seq_length_2", dest="seq_length_2", type=int, default=-1, help="height for 2D input data. If this is > 0, then seq_length is considered to be width.")
 parser.add_argument("--hidden_dim", dest="hidden_dim", type=int, default=32, help="number of NN nodes")
 parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, help="the output dimension for nllloss. Not used for the other loss functions")
 parser.add_argument("--n_layer", dest="n_layer", type=int, default=5, help="number of NN layers")
@@ -119,7 +121,10 @@ def train(device):
     model = MyModel(args) 
 
     print(model)
-    #summary( model, input_size=(args.batch_size, args.seq_length, n_feature_in), col_names=["output_size", "num_params"], device=device)
+    if args.seq_length_2 < 1:
+        summary( model, input_size=(args.batch_size, args.seq_length, n_feature_in), col_names=["output_size", "num_params"], device=device)
+    else:
+        summary( model, input_size=(args.batch_size, n_feature_in, args.seq_length, args.seq_length_2), col_names=["output_size", "num_params"], device=device)
 
     if args.model_dir_load != args.model_dir_save and args.model_dir_load != "./Model": ### load network parameters and freeze the first few layers of the network
 
@@ -153,11 +158,16 @@ def train(device):
 
     ### load training and validation data ###
     norm_params = np.loadtxt(args.fname_norm)
-    train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=args.r_train, shuffle=True)
-    fname_comb = f"{args.data_dir}/../Combinations.txt"
+    fname_comb = f"{args.comb_dir}/Combinations.txt"
 
-    data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
-    val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device, pbar=args.progress_bar)
+    if args.seq_length_2 < 0:
+        train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=args.r_train, shuffle=True)
+        data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
+        val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device, pbar=args.progress_bar)
+    else:
+        train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=args.r_train, shuffle=True, suffix="z.txt")
+        data, label = load_data_2d(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, width=args.seq_length, height=args.seq_length_2, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
+        val_data, val_label = load_data_2d(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, width=args.seq_length, height=args.seq_length_2, norm_params=norm_params, loss=args.loss, device=device, pbar=args.progress_bar)
 
     dataset = MyDataset(data, label)
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
@@ -308,7 +318,10 @@ def test(device):
     norm_params = np.loadtxt(args.fname_norm)
     _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
     fname_comb = f"{args.test_dir}/../Combinations.txt"
-    data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
+    if args.seq_length_2 < 1:
+        data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
+    else:
+        data, label = load_data_2d(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, width=args.seq_length, height=args.seq_length_2, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
 
     ### output test result ###
     fname = "{}/test.txt".format(args.model_dir_save)

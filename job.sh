@@ -9,21 +9,21 @@ input_id=1
 fname_norm=./param/norm_params1.txt
 
 nrea_noise=1
-ndata=80000
-r_train=0.99
+ndata=95000
+r_train=0.999
 
 ### ML model parameters ###
 
 model=CNN
 
 hidden_dim=16
-n_layer=2
+n_layer=4
 r_drop=0
 
 ### training parameters ###
 batch_size=128
-epoch=5
-epoch_decay=5
+epoch=1
+epoch_decay=1
 total_epoch=$(( epoch + epoch_decay ))
 lr=0.002
 

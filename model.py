@@ -21,16 +21,26 @@ def MyModel(args):
 
     if args.model == "RNN":
         model = RecurrentNet(n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, last_act=last_act)
-    elif args.model == "CNN":
-        model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
-    elif args.model == "CNN_LSTM":
-        model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act, additional_layer="lstm")
-    elif args.model == "CNN_at":
-        model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act, additional_layer="attention")
-    elif args.model == "CNN2":
-        model = ConvNet(Conv1dBlock2, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
+
+    elif "CNN" in args.model:
+        if args.seq_length_2 > 0:
+            model = Conv2dNet(Conv2dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, width=args.seq_length, height=args.seq_length_2, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
+
+        else:
+            block = Conv1dBlock2 if args.model == "CNN2" else Conv1dBlock
+
+            if "LSTM" in args.model:
+                additional_layer = "lstm"
+            elif "attention" in args.model:
+                additional_layer = "attention"
+            else:
+                additional_layer = False
+
+            model = ConvNet(block, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act, additional_layer=additional_layer)
+
     elif args.model == "ResNet":
         model = ResNet(ResidualBlock, [3,3,3,3], n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, output_dim=args.output_dim, hidden_dim=args.hidden_dim, last_act=last_act)
+
     elif args.model == "BNN":
         if args.loss == "nllloss":
             print("Error: The current version does not allow nllloss for BNN", file=sys.stderr)
@@ -126,6 +136,30 @@ class Conv1dBlock2(nn.Module):
         x = self.pool(x)
         return x
 
+class Conv2dBlock(nn.Module):
+
+    def __init__(self, nin=32, nout=32, kernel_size=[3,3], stride=[2,2], padding="same", bn=False, r_drop=0):
+        super().__init__()
+
+        self.bn = bn
+        self.drop = True if r_drop > 0 else False
+
+        self.conv = nn.Conv2d(nin, nout, kernel_size=kernel_size, stride=stride, padding=padding)
+        if self.bn:
+            self.batch_norm = nn.BatchNorm2d(nout)
+        if self.drop:
+            self.dropout = nn.Dropout(r_drop)
+        self.act = nn.LeakyReLU()
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn:
+            x = self.batch_norm(x)
+        if self.drop:
+            x = self.dropout(x)
+        x = self.act(x)
+        return x
+
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride = 1, downsample = None):
         super().__init__()
@@ -209,10 +243,11 @@ class ConvNet(nn.Module):
 
         self.additional_layer = additional_layer
         if self.additional_layer == "lstm":
-            self.hidden_size = 1024
+            self.hidden_size = 512
             self.n_layer_lstm = 1
             self.lstm = nn.LSTM(input_size=output_dims[-1], hidden_size=self.hidden_size, num_layers=self.n_layer_lstm, batch_first=True)
             self.linear = nn.Linear(self.hidden_size, seq_length_out*n_feature_out)
+
         elif self.additional_layer == "attention":
             self.attention = nn.MultiheadAttention(embed_dim=output_dims[-1], num_heads=8, batch_first=True)
             self.linear = nn.Linear(output_dims[-1], seq_length_out*n_feature_out)
@@ -253,8 +288,9 @@ class ConvNet(nn.Module):
             x = torch.transpose(x, 1, 2)
             ## x: (batch, seq/2**n_layer, output_dims[-1])
 
-            x = self.attention(x, x, x)
+            x, w = self.attention(x, x, x)
             ## x: (batch, seq/2**n_layer, output_dims[-1])
+            ## w: weight (batch, seq/2**n_layer, output_dims[-1])
 
             x = x[:, 0, :]
             ## x: ( batch, output_dims[-1] )
@@ -327,3 +363,72 @@ class ResNet(nn.Module):
         x = self.last_act(x)
 
         return x
+
+class Conv2dNet(nn.Module):
+
+    def __init__(self, block, n_feature_in=8, n_feature_out=1, width=10, height=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, last_act=nn.LogSoftmax(dim=1)):
+        super().__init__()
+
+        self.seq_length_out = seq_length_out
+
+        padding = int( kernel_size / 2 )
+
+        input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
+        output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
+        batch_norms = [ False ] * n_layer
+        if n_layer == 1:
+            dropout_rates = [ r_drop ]
+        else:
+            dropout_rates = [0, 0] + [ r_drop for i in range(n_layer-2) ] 
+
+        wtmp = width
+        htmp = height
+        kernel_sizes = []
+        ### e.g., for seq_length = 10 with 
+        ### (input_dim, 10, 10) -> (hidden_dim*2, 5, 5) -> (hidden_dim*4, 3, 3) -> (hidden_dim*8, 2, 2) 
+        for i in range(n_layer):
+            wtmp = int( ( wtmp + 1 ) / 2 )
+            htmp = int( ( htmp + 1 ) / 2 )
+            if wtmp > kernel_size:
+                if htmp > kernel_size:
+                    kernel_sizes.append([kernel_size, kernel_size])
+                else:
+                    kernel_sizes.append([kernel_size, htmp])
+            else:
+                if htmp > kernel_size:
+                    kernel_sizes.append([wtmp, kernel_size])
+                else:
+                    kernel_sizes.append([wtmp, htmp])
+
+        self.blocks = nn.ModuleList([
+            block(nin=i, nout=j, stride=2, kernel_size=ks, padding=padding, bn=bn, r_drop=r)
+            for i, j, ks, bn, r in zip(input_dims, output_dims, strides, kernel_sizes, batch_norms, dropout_rates)
+            ])
+
+        final_dim = wtmp * htmp * output_dims[-1]
+        self.linear = nn.Linear(final_dim, seq_length_out*n_feature_out)
+        self.output_act = last_act
+
+    def forward(self, x):
+        ## x: (batch, input_dim, H, W)
+
+        batch_size = x.size(0)
+
+        for blk in self.blocks:
+            x = blk(x)
+        ## x: (batch, output_dims[-1], H/2**n_layer, W/2**n_layer)
+
+        x = x.contiguous().view(batch_size, -1)
+        ## x: (batch, hidden_dim*H*W/4)
+
+        x = self.linear(x)
+        ## x: (batch, seq_length_out*n_feature_out)
+
+        if self.seq_length_out != 1:
+            x = x.reshape(batch_size, self.seq_length_out, -1)
+            ## x: (batch, seq_length_out, n_feature_out) 
+
+        x = self.output_act(x)
+
+        return x
+

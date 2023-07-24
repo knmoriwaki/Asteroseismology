@@ -56,7 +56,7 @@ def print_pdf(pdf, xmin, xmax):
     print("#### end of label distribution ####")
 
 
-def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_train = 0.9, shuffle=True):
+def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_train = 0.9, shuffle=True, suffix="data"):
 
     id_list = np.array(range(ndata))
 
@@ -67,12 +67,12 @@ def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_t
     ### for training data, we use multiple realizations for each spectrum
     ### During the training, the data will be shuffled again via DataLoader
     ids_train = [ i for i in id_list[:int(ndata * r_train)]]
-    fnames_train = [ "{}/{:07d}.{:d}.data".format(data_dir, i+id_start, irea) for i in ids_train for irea in range(nrea_noise)]
+    fnames_train = [ "{}/{:07d}.{:d}.{}".format(data_dir, i+id_start, irea, suffix) for i in ids_train for irea in range(nrea_noise)]
     ids_train = [ i for i in ids_train for irea in range(nrea_noise) ]
 
     ### for validation data, we use only one realization (id=0) for each spectrum.
     ids_val = [ i for i in id_list[int(ndata * r_train):] ]
-    fnames_val = [ "{}/{:07d}.0.data".format(data_dir, i+id_start) for i in ids_val ]
+    fnames_val = [ "{}/{:07d}.0.{}".format(data_dir, i+id_start, suffix) for i in ids_val ]
 
     if len(ids_val) == 0:
         ids_val = [ids_train[-1]]
@@ -106,9 +106,18 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
         d = input_data[:,input_id] ## read 1: noisy spec, 2: noiseless spec
         d = d.reshape(seq_length, n_feature_in) #(seq_length, n_feature_in=1)
             
-        data.append(d) #( ndata, seq_length, n_feature_in)
+        data.append(d) 
 
-    data = np.array(data)
+    data = np.array(data) #( ndata, seq_length, n_feature_in)
+
+    if np.shape(data)[1] != seq_length:
+        print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
+        sys.exit(1)
+
+    if np.shape(data)[2] != n_feature_in:
+        print(f"Error: inconsistent n_feature_in {np.shape(data)[2]} != {n_feature_in}", file=sys.stderr)
+        sys.exit(1)
+
 
     ### read target data ###
     n_feature_out = len(output_id)
@@ -136,13 +145,92 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
         target = np.array([ [ int( t * output_dim ) if t < 1 else output_dim -1 for t in tt ] for tt in target ])
         # (ndata, n_feature_out)
 
-    if np.shape(data)[1] != seq_length:
-        print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
+    ### convert the data to torch.tensor ###
+    data = torch.from_numpy( np.array(data).astype(np.float32) )
+    target = torch.from_numpy( np.array(target) )
+    if loss == "nllloss":
+        target = target.to(torch.long)
+    else:
+        target = target.to(torch.float32)
+
+    ### send the data to device ###
+    if device is not None:
+        data = data.to(device)
+        target = target.to(device)
+
+    print( f"# data size: {data.size()}" )
+    print( f"# target size: {target.size()}" )
+
+    return data, target
+
+
+def load_data_2d(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, input_id=[1], output_id=[13], width=10, height=10, norm_params=None, loss="l1norm", device="cpu", pbar=False):
+
+    if len(np.shape(norm_params)) == 1:
+        norm_params = norm_params.reshape(1,-1)
+
+    print(f"Loading files... ", file=sys.stderr)
+
+    ### read input data ###
+    n_feature_in = len(input_id)
+    data = []
+    flist = tqdm(fnames, file=sys.stderr) if pbar else fnames
+    count = 0
+    for f in flist:
+        if os.path.exists(f) == False: 
+            #print(f"# Error: file not found {f}", file=sys.stderr) 
+            #sys.exit(1)
+            print(f"# Warning: file not found {f}", file=sys.stderr)
+            del data_ids[count]
+            continue
+        else:
+            count += 1
+
+        d = np.loadtxt(f) #( width, height )
+        d = d.reshape(n_feature_in, width, height) #(n_feature_in=1, width, height)
+            
+        data.append(d)
+
+    data = np.array(data) #( ndata, n_feature_in, width, height)
+
+    if np.shape(data)[1] != n_feature_in:
+        print(f"Error: inconsistent n_feature_in {np.shape(data)[1]} != {n_feature_in}", file=sys.stderr)
         sys.exit(1)
 
-    if np.shape(data)[2] != n_feature_in:
-        print(f"Error: inconsistent n_feature_in {np.shape(data)[2]} != {n_feature_in}", file=sys.stderr)
+    if np.shape(data)[2] != width:
+        print(f"Error: inconsistent seq_length {np.shape(data)[2]} != {width}", file=sys.stderr)
         sys.exit(1)
+
+    if np.shape(data)[3] != height:
+        print(f"Error: inconsistent seq_length {np.shape(data)[3]} != {height}", file=sys.stderr)
+        sys.exit(1)
+
+
+    ### read target data ###
+    n_feature_out = len(output_id)
+    target = np.loadtxt(fname_comb, skiprows=5, usecols=output_id, ndmin=2)
+    target = target[data_ids] # (ndata, n_feature_out)
+
+    # if you want to convert it to sin, do so here by, e.g., 
+    #target[:,0] = np.sin( np.deg2rad( target[:,0] ))
+    # in this case, do not forget to change the normalization parameter accordingly
+
+    if norm_params is not None:
+        ## normalize input data
+        for i in range(n_feature_in):
+            data[:,:,i] -= norm_params[i,0]
+            if norm_params[i,1] > 0: data[:,:,i] /= norm_params[i,1]
+            print("# input feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(i, norm_params[i,0], norm_params[i,1]))
+        ## normalize target data
+        for ii in range(n_feature_out):
+            i = n_feature_in + ii
+            target[:,ii] -= norm_params[i,0]
+            if norm_params[i,1] > 0: target[:,ii] /= norm_params[i,1]
+            print("# output feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(ii, norm_params[i,0], norm_params[i,1]))
+
+    if loss == "nllloss":
+        target = np.array([ [ int( t * output_dim ) if t < 1 else output_dim -1 for t in tt ] for tt in target ])
+        # (ndata, n_feature_out)
 
     ### convert the data to torch.tensor ###
     data = torch.from_numpy( np.array(data).astype(np.float32) )
