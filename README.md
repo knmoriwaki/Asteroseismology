@@ -34,6 +34,8 @@ If you use `nllloss` as the loss function, then the resulting pdf will cover the
 
 - You can change the parameters in run.sh. For the output_id, you can choose multiple ids (column number) by, e.g., `python main.py --output_id 1 2 3 --isTrain`.
 
+- If you want to train on 2D data, set both seq_length and seq_length_2 > 0. 
+
 
 - After the training, use plot.ipynb to check the model performance. 
 
