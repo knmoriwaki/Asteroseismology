@@ -371,8 +371,6 @@ class Conv2dNet(nn.Module):
 
         self.seq_length_out = seq_length_out
 
-        padding = int( kernel_size / 2 )
-
         input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
         output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
         batch_norms = [ False ] * n_layer
@@ -384,6 +382,7 @@ class Conv2dNet(nn.Module):
         wtmp = width
         htmp = height
         kernel_sizes = []
+        paddings = []
         ### e.g., for seq_length = 10 with 
         ### (input_dim, 10, 10) -> (hidden_dim*2, 5, 5) -> (hidden_dim*4, 3, 3) -> (hidden_dim*8, 2, 2) 
         for i in range(n_layer):
@@ -399,10 +398,11 @@ class Conv2dNet(nn.Module):
                     kernel_sizes.append([wtmp, kernel_size])
                 else:
                     kernel_sizes.append([wtmp, htmp])
+            paddings.append([ int( kw / 2 ) for kw in kernel_sizes[-1] ])
 
         self.blocks = nn.ModuleList([
-            block(nin=i, nout=j, stride=2, kernel_size=ks, padding=padding, bn=bn, r_drop=r)
-            for i, j, ks, bn, r in zip(input_dims, output_dims, kernel_sizes, batch_norms, dropout_rates)
+            block(nin=i, nout=j, stride=2, kernel_size=ks, padding=pd, bn=bn, r_drop=r)
+            for i, j, ks, pd, bn, r in zip(input_dims, output_dims, kernel_sizes, paddings, batch_norms, dropout_rates)
             ])
 
         final_dim = wtmp * htmp * output_dims[-1]
