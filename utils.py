@@ -109,7 +109,7 @@ def load_data(fnames, data_ids, fname_comb, output_dim, input_id, output_id, seq
         data.append(d)
 
     data = np.array(data) #( ndata, seq_length)
-    data = np.reshape( -1, seq_length, 1 ) #( ndata, seq_length, n_feature_in)
+    data = data.reshape( -1, seq_length, 1 ) #( ndata, seq_length, n_feature_in)
 
     if np.shape(data)[1] != seq_length:
         print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
@@ -202,7 +202,7 @@ def load_data_2d(fnames, data_ids, fname_comb, output_dim, input_id, output_id, 
         data.append(d)
 
     data = np.array(data)  #( ndata, width, height)
-    data = np.reshape( -1, 1, width, height ) #( ndata, n_feature_in, width, height)
+    data = data.reshape( -1, 1, width, height ) #( ndata, n_feature_in, width, height)
 
     if np.shape(data)[1] != n_feature_in:
         print(f"Error: inconsistent n_feature_in {np.shape(data)[1]} != {n_feature_in}", file=sys.stderr)

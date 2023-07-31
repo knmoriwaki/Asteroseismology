@@ -15,7 +15,7 @@ input_id=1
 fname_norm=./param/norm_params1.txt
 
 nrea_noise=1
-ndata=10000 
+ndata=10000
 r_train=0.99
 
 ### ML model parameters ###
