@@ -44,6 +44,8 @@ parser.add_argument("--epoch", dest="epoch", type=int, default=10, help="trainin
 parser.add_argument("--epoch_decay", dest="epoch_decay", type=int, default=0, help="training epoch")
 parser.add_argument("--lr", dest="lr", type=float, default=1e-3, help="learning rate")
 parser.add_argument("--loss", dest="loss", default="l1norm", help="loss function")
+parser.add_argument("--batch_norm", action="store_true", help="batch normalization")
+parser.add_argument("--l2_lambda", dest="l2_lambda", type=float, default=-1.0, help="L2 regulartization for avoiding overfitting")
 
 parser.add_argument("--i_layer_freeze", dest="i_layer_freeze", nargs="+", type=int, default=-1, help="layer numbers (0, 1, ..., n_layer-1) to be freezed. You can freeze multple layers.")
 
@@ -161,7 +163,7 @@ def train(device):
     fname_comb = f"{args.comb_dir}/Combinations.txt"
 
     if args.seq_length_2 < 0:
-        train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, r_train=args.r_train, shuffle=True)
+        train_fnames, val_fnames, train_ids, val_ids, = load_fnames(args.data_dir, ndata=args.ndata, nrea_noise=args.nrea_noise, id_start=1, r_train=args.r_train, shuffle=True)
         data, label = load_data(train_fnames, train_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
         val_data, val_label = load_data(val_fnames, val_ids, fname_comb, output_dim=args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=device, pbar=args.progress_bar)
     else:
@@ -224,9 +226,16 @@ def train(device):
                 loss = loss_func(output, ll)
                 loss_val = loss_func(output_val, val_label)
 
-            print("{:d} {:f} {:f} {:f}".format(idx, idx/n_per_epoch, loss.item(), loss_val.item()) )
+            item_to_print = "{:d} {:f} {:f} {:f}".format(idx, idx/n_per_epoch, loss.item(), loss_val.item()) 
+            if args.l2_lambda > 0:
+                l2_norm = args.l2_lambda * sum(p.pow(2.0).sum() for p in model.parameters())
+                l2_norm.to(device)
+                loss += l2_norm
+                item_to_print += " {:f}".format(l2_norm.item())
+
+            print(item_to_print)
             with open(fout, "a") as f:
-                print("{:d} {:f} {:f} {:f}".format(idx, idx/n_per_epoch, loss.item(), loss_val.item()), file=f)
+                print(item_to_print, file=f)
 
             model.zero_grad()
             loss.backward()
@@ -316,7 +325,7 @@ def test(device):
 
     ### load test data ###
     norm_params = np.loadtxt(args.fname_norm)
-    _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, r_train=0.0, shuffle=False)
+    _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, id_start=0, r_train=0.0, shuffle=False)
     fname_comb = f"{args.test_dir}/../Combinations.txt"
     if args.seq_length_2 < 1:
         data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)

@@ -24,7 +24,7 @@ def MyModel(args):
 
     elif "CNN" in args.model:
         if args.seq_length_2 > 0:
-            model = Conv2dNet(Conv2dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, width=args.seq_length, height=args.seq_length_2, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
+            model = Conv2dNet(Conv2dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, width=args.seq_length, height=args.seq_length_2, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act)
 
         else:
             block = Conv1dBlock2 if args.model == "CNN2" else Conv1dBlock
@@ -36,7 +36,7 @@ def MyModel(args):
             else:
                 additional_layer = False
 
-            model = ConvNet(block, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act, additional_layer=additional_layer)
+            model = ConvNet(block, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, additional_layer=additional_layer)
 
     elif args.model == "ResNet":
         model = ResNet(ResidualBlock, [3,3,3,3], n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, output_dim=args.output_dim, hidden_dim=args.hidden_dim, last_act=last_act)
@@ -45,7 +45,7 @@ def MyModel(args):
         if args.loss == "nllloss":
             print("Error: The current version does not allow nllloss for BNN", file=sys.stderr)
             sys.exit(1)
-        model = ConvNet(Conv1dBlock_w_Conv2d, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, last_act=last_act)
+        model = ConvNet(Conv1dBlock_w_Conv2d, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act)
         transform_model(model, nn.Conv2d, bnn.BayesConv2d, 
             args={"prior_mu":0, "prior_sigma":0.1, "in_channels" : ".in_channels",
                   "out_channels" : ".out_channels", "kernel_size" : ".kernel_size",
@@ -220,7 +220,7 @@ class RecurrentNet(nn.Module):
 
 class ConvNet(nn.Module):
 
-    def __init__(self, block, n_feature_in=8, n_feature_out=1, seq_length=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, last_act=nn.LogSoftmax(dim=1), additional_layer=None):
+    def __init__(self, block, n_feature_in=8, n_feature_out=1, seq_length=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, batch_norm=False, last_act=nn.LogSoftmax(dim=1), additional_layer=None):
         super().__init__()
 
         self.seq_length_out = seq_length_out
@@ -229,16 +229,15 @@ class ConvNet(nn.Module):
 
         input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
         output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
-        #batch_norms = [ True ] + [ False ] * (n_layer-1)
-        batch_norms = [ False ] * n_layer
+
         if n_layer == 1:
             dropout_rates = [ r_drop ]
         else:
             dropout_rates = [0, 0] + [ r_drop for i in range(n_layer-2) ] 
 
         self.blocks = nn.ModuleList([
-            block(nin=i, nout=j, stride=2, kernel_size=kernel_size, padding=padding, bn=bn, r_drop=r)
-            for i, j, bn, r in zip(input_dims, output_dims, batch_norms, dropout_rates)
+            block(nin=i, nout=j, stride=2, kernel_size=kernel_size, padding=padding, bn=batch_norm, r_drop=r)
+            for i, j, r in zip(input_dims, output_dims, dropout_rates)
             ])
 
         self.additional_layer = additional_layer
@@ -366,14 +365,14 @@ class ResNet(nn.Module):
 
 class Conv2dNet(nn.Module):
 
-    def __init__(self, block, n_feature_in=8, n_feature_out=1, width=10, height=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, last_act=nn.LogSoftmax(dim=1)):
+    def __init__(self, block, n_feature_in=8, n_feature_out=1, width=10, height=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, batch_norm=False, last_act=nn.LogSoftmax(dim=1)):
         super().__init__()
 
         self.seq_length_out = seq_length_out
 
         input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
         output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
-        batch_norms = [ False ] * n_layer
+
         if n_layer == 1:
             dropout_rates = [ r_drop ]
         else:
@@ -401,8 +400,8 @@ class Conv2dNet(nn.Module):
             paddings.append([ int( kw / 2 ) for kw in kernel_sizes[-1] ])
 
         self.blocks = nn.ModuleList([
-            block(nin=i, nout=j, stride=2, kernel_size=ks, padding=pd, bn=bn, r_drop=r)
-            for i, j, ks, pd, bn, r in zip(input_dims, output_dims, kernel_sizes, paddings, batch_norms, dropout_rates)
+            block(nin=i, nout=j, stride=2, kernel_size=ks, padding=pd, bn=batch_norm, r_drop=r)
+            for i, j, ks, pd, r in zip(input_dims, output_dims, kernel_sizes, paddings, dropout_rates)
             ])
 
         final_dim = wtmp * htmp * output_dims[-1]

@@ -2,6 +2,8 @@ import os
 import sys
 import numpy as np
 
+import re
+
 import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -56,7 +58,7 @@ def print_pdf(pdf, xmin, xmax):
     print("#### end of label distribution ####")
 
 
-def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_train = 0.9, shuffle=True, suffix="data"):
+def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, r_train = 0.9, shuffle=True, suffix="data"):
 
     id_list = np.array(range(ndata))
 
@@ -80,7 +82,7 @@ def load_fnames(data_dir, ndata, id_start=1, nrea_noise=1, nrea_noise_val=3, r_t
 
     return fnames_train, fnames_val, ids_train, ids_val
 
-def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, input_id=[1], output_id=[13], seq_length=10, norm_params=None, loss="l1norm", device="cpu", pbar=False):
+def load_data(fnames, data_ids, fname_comb, output_dim, input_id, output_id, seq_length, norm_params=None, loss="l1norm", device="cpu", pbar=False):
 
     if len(np.shape(norm_params)) == 1:
         norm_params = norm_params.reshape(1,-1)
@@ -97,18 +99,17 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
             #print(f"# Error: file not found {f}", file=sys.stderr) 
             #sys.exit(1)
             print(f"# Warning: file not found {f}", file=sys.stderr)
+            print(f"# Delete data_ids {data_ids[count]}", file=sys.stderr)
             del data_ids[count]
             continue
         else:
             count += 1
 
-        input_data = np.loadtxt(f)
-        d = input_data[:,input_id] ## read 1: noisy spec, 2: noiseless spec
-        d = d.reshape(seq_length, n_feature_in) #(seq_length, n_feature_in=1)
-            
-        data.append(d) 
+        d = np.loadtxt(f)[:seq_length, input_id]
+        data.append(d)
 
-    data = np.array(data) #( ndata, seq_length, n_feature_in)
+    data = np.array(data) #( ndata, seq_length)
+    data = np.reshape( -1, seq_length, 1 ) #( ndata, seq_length, n_feature_in)
 
     if np.shape(data)[1] != seq_length:
         print(f"Error: inconsistent seq_length {np.shape(data)[1]} != {seq_length}", file=sys.stderr)
@@ -121,8 +122,17 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
 
     ### read target data ###
     n_feature_out = len(output_id)
-    target = np.loadtxt(fname_comb, skiprows=5, usecols=output_id, ndmin=2)
+    target = np.loadtxt(fname_comb, skiprows=0, usecols=output_id, ndmin=2)
     target = target[data_ids] # (ndata, n_feature_out)
+
+    fname_id = np.loadtxt(fname_comb, skiprows=0, usecols=0)
+    fname_id = fname_id[data_ids]
+    fname_id0 = "%07d" % int(fname_id[0]) 
+
+    if fname_id0 not in fnames[0]:
+        print("Error: id %d is inconsistent with fname %s" % (fname_id[0], fnames[0]), file=sys.stderr)
+        print("Check skiprows and id_start in utils.py", file=sys.stderr)
+        sys.exit(1)
 
     # if you want to convert it to sin, do so here by, e.g., 
     #target[:,0] = np.sin( np.deg2rad( target[:,0] ))
@@ -131,6 +141,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     if norm_params is not None:
         ## normalize input data
         for i in range(n_feature_in):
+            print(i)
             data[:,:,i] -= norm_params[i,0]
             if norm_params[i,1] > 0: data[:,:,i] /= norm_params[i,1]
             print("# input feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(i, norm_params[i,0], norm_params[i,1]))
@@ -164,7 +175,7 @@ def load_data(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100,
     return data, target
 
 
-def load_data_2d(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=100, input_id=[1], output_id=[13], width=10, height=10, norm_params=None, loss="l1norm", device="cpu", pbar=False):
+def load_data_2d(fnames, data_ids, fname_comb, output_dim, input_id, output_id, width, height, norm_params=None, loss="l1norm", device="cpu", pbar=False):
 
     if len(np.shape(norm_params)) == 1:
         norm_params = norm_params.reshape(1,-1)
@@ -181,17 +192,17 @@ def load_data_2d(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=1
             #print(f"# Error: file not found {f}", file=sys.stderr) 
             #sys.exit(1)
             print(f"# Warning: file not found {f}", file=sys.stderr)
+            print(f"# Delete data_ids {data_ids[count]}", file=sys.stderr)
             del data_ids[count]
             continue
         else:
             count += 1
 
-        d = np.loadtxt(f) #( width, height )
-        d = d.reshape(n_feature_in, width, height) #(n_feature_in=1, width, height)
-            
+        d = np.loadtxt(f)
         data.append(d)
 
-    data = np.array(data) #( ndata, n_feature_in, width, height)
+    data = np.array(data)  #( ndata, width, height)
+    data = np.reshape( -1, 1, width, height ) #( ndata, n_feature_in, width, height)
 
     if np.shape(data)[1] != n_feature_in:
         print(f"Error: inconsistent n_feature_in {np.shape(data)[1]} != {n_feature_in}", file=sys.stderr)
@@ -211,6 +222,15 @@ def load_data_2d(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=1
     target = np.loadtxt(fname_comb, skiprows=5, usecols=output_id, ndmin=2)
     target = target[data_ids] # (ndata, n_feature_out)
 
+    fname_id = np.loadtxt(fname_comb, skiprows=5, usecols=0)
+    fname_id = fname_id[data_ids]
+    fname_id0 = "%07d" % int(fname_id[0]) 
+
+    if fname_id0 not in fnames[0]:
+        print("Error: id %d is inconsistent with fname %s" % (fname_id[0], fnames[0]), file=sys.stderr)
+        print("Check skiprows and id_start in utils.py", file=sys.stderr)
+        sys.exit(1)
+
     # if you want to convert it to sin, do so here by, e.g., 
     #target[:,0] = np.sin( np.deg2rad( target[:,0] ))
     # in this case, do not forget to change the normalization parameter accordingly
@@ -218,8 +238,8 @@ def load_data_2d(fnames, data_ids, fname_comb="./Combinations.txt", output_dim=1
     if norm_params is not None:
         ## normalize input data
         for i in range(n_feature_in):
-            data[:,:,i] -= norm_params[i,0]
-            if norm_params[i,1] > 0: data[:,:,i] /= norm_params[i,1]
+            data[:,i] -= norm_params[i,0]
+            if norm_params[i,1] > 0: data[:,i] /= norm_params[i,1]
             print("# input feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(i, norm_params[i,0], norm_params[i,1]))
         ## normalize target data
         for ii in range(n_feature_out):

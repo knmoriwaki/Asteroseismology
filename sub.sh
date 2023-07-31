@@ -4,40 +4,34 @@
 #data_dir=./training_data
 #seq_length=45412
 
-data_dir=./training_data2
-seq_length=68830
+data_dir=./training_data_good/Spectra_ascii
+comb_dir=./training_data_good
+seq_length=45412
 
-#input_id=2
-#fname_norm=./param/norm_params.txt
-
-input_id=1
-fname_norm=./param/norm_params1.txt
+input_id=2
+fname_norm=./param/norm_params_var2_ref.txt
 
 nrea_noise=1
-ndata=100000
-r_train=0.99
+ndata=10000
+r_train=0.9
 
 ### ML model parameters ###
 
 model=CNN
 
 hidden_dim=16
-n_layer=10
-r_drop=0
+n_layer=12
+r_drop=0.2
 
 ### training parameters ###
 batch_size=128
-epoch=5
-epoch_decay=5
+epoch=20
+epoch_decay=20
 total_epoch=$(( epoch + epoch_decay ))
-lr=0.0005
+lr=0.001
 
 loss=nllloss
-output_dim=45
-
-#loss=bce
-loss=l1norm
-
+output_dim=30
 
 ### directory names ### 
 
@@ -51,12 +45,13 @@ mkdir -p $model_dir
 ### training ###
 echo $model_base
 today=`date '+%Y-%m-%d'`
-python main.py --gpu_id 0 --isTrain --data_dir $data_dir --comb_dir $data_dir/.. --ndata $ndata --r_train $r_train --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 5 --nrea_noise $nrea_noise --progress_bar #> ./tmp/out_${today}_${model_base}.log
+python main.py --gpu_id 0 --isTrain --data_dir $data_dir --comb_dir $comb_dir --ndata $ndata --r_train $r_train --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 5 --nrea_noise $nrea_noise --progress_bar > ./tmp/out_${today}_${model_base}.log
 
 echo "# output ./tmp/out_${today}_${model_base}.log"
 
 ### test ###
-test_dir=./test_data
-ndata_test=6
-#python main.py --gpu_id 1 --test_dir $test_dir --ndata $ndata_test --model_dir_load $model_dir $model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 1 --progress_bar
+test_dir=./Test_HBR5/Spectra_ascii
+comb_dir=./Test_HBR5
+ndata_test=100
+python main.py --gpu_id 0 --test_dir $test_dir --comb_dir $comb_dir --ndata $ndata_test --model_dir_load $model_dir --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 5 --progress_bar
 
