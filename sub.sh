@@ -9,7 +9,7 @@ comb_dir=./training_data_good
 seq_length=45412
 
 input_id=2
-fname_norm=./param/norm_params_var2_ref.txt
+fname_norm=./param/norm_params.txt
 
 nrea_noise=1
 ndata=10000
@@ -31,6 +31,7 @@ epoch_decay=20
 total_epoch=$(( epoch + epoch_decay ))
 lr=0.001
 l2_lambda=-1.0
+#l2_lambda=0.001
 
 loss=nllloss
 output_dim=30
@@ -50,7 +51,7 @@ mkdir -p $model_dir
 ### training ###
 echo $model_base
 today=`date '+%Y-%m-%d'`
-python main.py --gpu_id 0 --isTrain --data_dir $data_dir --comb_dir $comb_dir --ndata $ndata --r_train $r_train --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 5 --nrea_noise $nrea_noise --progress_bar # > ./tmp/out_${today}_${model_base}.log
+python main.py --gpu_id 0 --isTrain --data_dir $data_dir --comb_dir $comb_dir --ndata $ndata --r_train $r_train --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --l2_lambda $l2_lambda --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 --nrea_noise $nrea_noise --progress_bar # > ./tmp/out_${today}_${model_base}.log
 
 echo "# output ./tmp/out_${today}_${model_base}.log"
 

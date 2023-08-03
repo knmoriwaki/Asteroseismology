@@ -87,6 +87,24 @@ def update_learning_rate(optimizer, scheduler):
     lr = optimizer.param_groups[0]['lr']
     print('# learning rate %.7f -> %.7f' % (old_lr, lr))
 
+class EarlyStopping:
+    def __init__(self, patience=100):
+        self.count = 0
+        self.pre_loss = float("inf")
+        self.patience = patience
+        self.early_stop = False
+    
+    def __call__(self, current_loss):
+        if self.pre_loss < current_loss:
+            self.count += 1
+            if self.count > self.patience:
+                print("# Early stopping")
+            self.early_stop = True
+
+        else:
+            self.count = 0
+            self.pre_loss = current_loss
+
 ####################################################
 ### training
 ####################################################
@@ -193,6 +211,7 @@ def train(device):
     ### training ###
     idx = 0
     n_per_epoch = float( int( ntrain / args.batch_size ) )
+    early_stopping = EarlyStopping()
     print("Training...", file=sys.stderr)
     fout = "{}/log.txt".format(args.model_dir_save)
     print(f"# output {fout}", file=sys.stderr)
@@ -245,6 +264,13 @@ def train(device):
             torch.cuda.empty_cache()
 
             idx += 1
+
+            early_stopping(loss_val)
+            if early_stopping.early_stop:
+                break
+
+        if early_stopping.early_stop:
+            break
  
     ### print validation result ###
     with torch.no_grad():
