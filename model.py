@@ -22,6 +22,8 @@ def MyModel(args):
     if args.model == "RNN":
         model = RecurrentNet(n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, last_act=last_act)
 
+    elif args.model == "Dhanpal22":
+        model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, nlayer_increase=args.n_layer, additional_layer="lstm2")
     elif "CNN" in args.model:
         if args.seq_length_2 > 0:
             model = Conv2dNet(Conv2dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, width=args.seq_length, height=args.seq_length_2, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act)
@@ -34,7 +36,7 @@ def MyModel(args):
             elif "attention" in args.model:
                 additional_layer = "attention"
             else:
-                additional_layer = False
+                additional_layer = "" 
 
             model = ConvNet(block, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, additional_layer=additional_layer)
 
@@ -220,15 +222,15 @@ class RecurrentNet(nn.Module):
 
 class ConvNet(nn.Module):
 
-    def __init__(self, block, n_feature_in=8, n_feature_out=1, seq_length=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, batch_norm=False, last_act=nn.LogSoftmax(dim=1), additional_layer=None):
+    def __init__(self, block, n_feature_in=8, n_feature_out=1, seq_length=10, seq_length_out=10, hidden_dim=32, n_layer=4, kernel_size=3, r_drop=0, batch_norm=False, last_act=nn.LogSoftmax(dim=1), nlayer_increase=3, additional_layer="" ):
         super().__init__()
 
         self.seq_length_out = seq_length_out
 
         padding = int( kernel_size / 2 )
 
-        input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 8) for i in range(n_layer-1) ]
-        output_dims = [ hidden_dim * min(2**i, 8) for i in range(n_layer) ]
+        input_dims = [ n_feature_in ] + [ hidden_dim * min(2**i, 2**nlayer_increase) for i in range(n_layer-1) ]
+        output_dims = [ hidden_dim * min(2**i, 2**nlayer_increase) for i in range(n_layer) ]
 
         if n_layer == 1:
             dropout_rates = [ r_drop ]
@@ -241,15 +243,20 @@ class ConvNet(nn.Module):
             ])
 
         self.additional_layer = additional_layer
-        if self.additional_layer == "lstm":
-            self.hidden_size = 512
-            self.n_layer_lstm = 1
+        if "lstm" in self.additional_layer:
+            self.hidden_size = 256
+            self.n_layer_lstm = 2 if "2" in self.additional_layer else 1
             self.lstm = nn.LSTM(input_size=output_dims[-1], hidden_size=self.hidden_size, num_layers=self.n_layer_lstm, batch_first=True)
-            self.linear = nn.Linear(self.hidden_size, seq_length_out*n_feature_out)
+
+            tmp = seq_length
+            for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
+            final_dim = tmp * self.hidden_size
+            if "_lstm" in self.additional_layer:
+                final_dim = self.hidden_dim
 
         elif self.additional_layer == "attention":
             self.attention = nn.MultiheadAttention(embed_dim=output_dims[-1], num_heads=8, batch_first=True)
-            self.linear = nn.Linear(output_dims[-1], seq_length_out*n_feature_out)
+            final_dim = output_dims[-1]
             
         else:
             ### e.g., for seq_length = 10 with 
@@ -257,7 +264,8 @@ class ConvNet(nn.Module):
             tmp = seq_length
             for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
             final_dim = tmp * output_dims[-1]
-            self.linear = nn.Linear(final_dim, seq_length_out*n_feature_out)
+        
+        self.linear = nn.Linear(final_dim, seq_length_out*n_feature_out)
         self.output_act = last_act
 
     def forward(self, x):
@@ -271,7 +279,7 @@ class ConvNet(nn.Module):
             x = blk(x)
         ## x: (batch, output_dims[-1], seq/2**n_layer)
 
-        if self.additional_layer == "lstm":
+        if "lstm" in self.additional_layer:
             x = torch.transpose(x, 1, 2)
             ## x: (batch, seq/2**n_layer, output_dims[-1])
 
@@ -281,8 +289,13 @@ class ConvNet(nn.Module):
             ## c_t: final cell state (n_layer_lstm, batch, hidden_size)
             ## h_t and c_t have batch at the second component even when batch_first = True
             
-            x = h_t[-1,:,:]
-            ## x: (batch, hidden_size)
+            if "_lstm" in self.additional_layer:
+                x = h_t[-1,:,:]
+                ## x: (batch, hidden_size)
+            else:
+                x = x.contiguous().view(batch_size, -1)
+                ## x: (batch, hidden_size * seq/2**n_layer)
+
         elif self.additional_layer == "attention":
             x = torch.transpose(x, 1, 2)
             ## x: (batch, seq/2**n_layer, output_dims[-1])
