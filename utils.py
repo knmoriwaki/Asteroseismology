@@ -141,7 +141,6 @@ def load_data(fnames, data_ids, fname_comb, output_dim, input_id, output_id, seq
     if norm_params is not None:
         ## normalize input data
         for i in range(n_feature_in):
-            print(i)
             data[:,:,i] -= norm_params[i,0]
             if norm_params[i,1] > 0: data[:,:,i] /= norm_params[i,1]
             print("# input feature {:d}: xmin = {:.1f}, dx = {:.1f}".format(i, norm_params[i,0], norm_params[i,1]))

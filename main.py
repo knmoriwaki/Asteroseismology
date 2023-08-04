@@ -88,20 +88,20 @@ def update_learning_rate(optimizer, scheduler):
     print('# learning rate %.7f -> %.7f' % (old_lr, lr))
 
 class EarlyStopping:
-    def __init__(self, patience=100):
+    def __init__(self, patience=100, delta=0.1):
         self.count = 0
         self.pre_loss = float("inf")
         self.patience = patience
         self.early_stop = False
+        self.delta = delta
     
     def __call__(self, current_loss):
-        if self.pre_loss < current_loss:
+        if current_loss > self.pre_loss + self.delta:
             self.count += 1
             if self.count > self.patience:
                 print("# Early stopping")
-            self.early_stop = True
-
-        else:
+                self.early_stop = True
+        elif current_loss < self.pre_loss:
             self.count = 0
             self.pre_loss = current_loss
 
@@ -273,6 +273,7 @@ def train(device):
             break
  
     ### print validation result ###
+    model.eval()
     with torch.no_grad():
         output = model(val_data)
         fname = "{}/val.txt".format(args.model_dir_save)
@@ -303,7 +304,6 @@ def train(device):
 
         if args.model == "BNN":
             #model.unfreeze()
-
 
             true = denorm(val_label, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
             nsample = 100

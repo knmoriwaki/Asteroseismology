@@ -246,7 +246,7 @@ class ConvNet(nn.Module):
         if "lstm" in self.additional_layer:
             self.hidden_size = 256
             self.n_layer_lstm = 2 if "2" in self.additional_layer else 1
-            self.lstm = nn.LSTM(input_size=output_dims[-1], hidden_size=self.hidden_size, num_layers=self.n_layer_lstm, batch_first=True)
+            self.lstm = nn.LSTM(input_size=output_dims[-1], hidden_size=self.hidden_size, num_layers=self.n_layer_lstm, batch_first=True, dropout=r_drop)
 
             tmp = seq_length
             for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
