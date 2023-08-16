@@ -9,7 +9,7 @@ input_id=2
 fname_norm=./param/norm_params.txt
 
 nrea_noise=1
-ndata=10000
+ndata=100
 r_train=0.99
 
 ### ML model parameters ###
@@ -19,7 +19,8 @@ model=Dhanpal22
 
 hidden_dim=16
 n_layer=6
-r_drop=0.4
+nlayer_increase=5
+r_drop=0.5
 
 ### training parameters ###
 batch_size=128
@@ -49,7 +50,7 @@ gpu_id=0
 ### training ###
 echo $model_base
 today=`date '+%Y-%m-%d'`
-python main.py --gpu_id $gpu_id --isTrain --data_dir $data_dir --comb_dir $comb_dir --ndata $ndata --r_train $r_train --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --r_drop $r_drop --batch_size $batch_size --l2_lambda $l2_lambda --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 5 --nrea_noise $nrea_noise --progress_bar # > ./tmp/out_${today}_${model_base}.log
+python main.py --gpu_id $gpu_id --isTrain --data_dir $data_dir --comb_dir $comb_dir --ndata $ndata --r_train $r_train --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --nlayer_increase $nlayer_increase --r_drop $r_drop --batch_size $batch_size --l2_lambda $l2_lambda --epoch $epoch --epoch_decay $epoch_decay --lr $lr --loss $loss --output_dim $output_dim --output_id 13 5 --nrea_noise $nrea_noise --progress_bar # > ./tmp/out_${today}_${model_base}.log
 
 echo "# output ./tmp/out_${today}_${model_base}.log"
 
@@ -57,5 +58,5 @@ echo "# output ./tmp/out_${today}_${model_base}.log"
 test_dir=./Test_HBR5/Spectra_ascii
 comb_dir=./Test_HBR5
 ndata_test=100
-python main.py --gpu_id $gpu_id --test_dir $test_dir --comb_dir $comb_dir --ndata $ndata_test --model_dir_load $model_dir --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 5 --progress_bar
+python main.py --gpu_id $gpu_id --test_dir $test_dir --comb_dir $comb_dir --ndata $ndata_test --model_dir_load $model_dir --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --nlayer_increase $nlayer_increase --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 5 --progress_bar
 
