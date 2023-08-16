@@ -38,6 +38,7 @@ parser.add_argument("--seq_length_2", dest="seq_length_2", type=int, default=-1,
 parser.add_argument("--hidden_dim", dest="hidden_dim", type=int, default=32, help="number of NN nodes")
 parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, help="the output dimension for nllloss. Not used for the other loss functions")
 parser.add_argument("--n_layer", dest="n_layer", type=int, default=5, help="number of NN layers")
+parser.add_argument("--nlayer_increase", dest="nlayer_increase", type=int, default=5, help="number of NN layers where the number of features is increased")
 parser.add_argument("--r_drop", dest="r_drop", type=float, default=0.0, help="dropout rate")
 parser.add_argument("--batch_size", dest="batch_size", type=int, default=4, help="batch size")
 parser.add_argument("--epoch", dest="epoch", type=int, default=10, help="training epoch")

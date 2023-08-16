@@ -23,7 +23,7 @@ def MyModel(args):
         model = RecurrentNet(n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, last_act=last_act)
 
     elif args.model == "Dhanpal22":
-        model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, nlayer_increase=5, additional_layer="lstm2")
+        model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, nlayer_increase=args.nlayer_increase, additional_layer="lstm2")
     elif "CNN" in args.model:
         if args.seq_length_2 > 0:
             model = Conv2dNet(Conv2dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, width=args.seq_length, height=args.seq_length_2, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act)
@@ -38,7 +38,7 @@ def MyModel(args):
             else:
                 additional_layer = "" 
 
-            model = ConvNet(block, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, additional_layer=additional_layer)
+            model = ConvNet(block, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, nlayer_increase=args.nlayer_increase, additional_layer=additional_layer)
 
     elif args.model == "ResNet":
         model = ResNet(ResidualBlock, [3,3,3,3], n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, output_dim=args.output_dim, hidden_dim=args.hidden_dim, last_act=last_act)
