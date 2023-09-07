@@ -10,7 +10,7 @@ from torch.optim import lr_scheduler
 
 from torchinfo import summary
 
-from model import MyModeld
+from model import MyModel
 
 from tqdm import tqdm
 
