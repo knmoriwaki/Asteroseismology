@@ -10,29 +10,32 @@ from torch.optim import lr_scheduler
 
 from torchinfo import summary
 
-from model import MyModel, RecurrentNet, ConvNet
+from model import MyModeld
 
 from tqdm import tqdm
 
 from utils import *
 
 parser = argparse.ArgumentParser(description="")
+
+### base parameters ###
 parser.add_argument("--gpu_id", dest="gpu_id", type=int, default=0, help="")
 parser.add_argument("--isTrain", dest="isTrain", action='store_true', help="train or test")
+parser.add_argument("--progress_bar", action="store_true")
+
+### data parameters ###
 parser.add_argument("--data_dir", dest="data_dir", default="./Data_analysis", help="Root directory of training dataset")
 parser.add_argument("--comb_dir", dest="comb_dir", default="./Data_analysis", help="Root directory where you have Combinations.txt")
-parser.add_argument("--test_dir", dest="test_dir", default="./test_data", help="Root directory of test data")
 parser.add_argument("--ndata", dest="ndata", type=int, default=10, help="the number of data")
-parser.add_argument("--r_train", dest="r_train", type=float, default=0.9, help="ratio of number of training data to ndata")
 parser.add_argument("--nrea_noise", dest="nrea_noise", type=int, default=1, help="the number of data")
+parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.txt", help="file name of the normalization parameters")
 parser.add_argument("--model_dir_save", dest="model_dir_save", default="./Model", help="Root directory to save learned model parameters")
 parser.add_argument("--model_dir_load", dest="model_dir_load", default="./Model", help="Root directory to load learned model parameters")
+
+### model parameters ### 
+parser.add_argument("--model", dest="model", default="NN", help="model")
 parser.add_argument("--input_id", dest="input_id", nargs="+", type=int, default=1, help="the column number(s) in, e.g., 0000000.0.txt.")
 parser.add_argument("--output_id", dest="output_id", nargs="+", type=int, default=13, help="the column number(s) in Combinations.txt. You can put multiple ids.")
-
-parser.add_argument("--model", dest="model", default="NN", help="model")
-parser.add_argument("--fname_norm", dest="fname_norm", default="./norm_params.txt", help="file name of the normalization parameters")
-
 parser.add_argument("--seq_length", dest="seq_length", type=int, default=45412, help="length of the sequence to input into RNN")
 parser.add_argument("--seq_length_2", dest="seq_length_2", type=int, default=-1, help="height for 2D input data. If this is > 0, then seq_length is considered to be width.")
 parser.add_argument("--hidden_dim", dest="hidden_dim", type=int, default=32, help="number of NN nodes")
@@ -40,6 +43,10 @@ parser.add_argument("--output_dim", dest="output_dim", type=int, default=30, hel
 parser.add_argument("--n_layer", dest="n_layer", type=int, default=5, help="number of NN layers")
 parser.add_argument("--nlayer_increase", dest="nlayer_increase", type=int, default=5, help="number of NN layers where the number of features is increased")
 parser.add_argument("--r_drop", dest="r_drop", type=float, default=0.0, help="dropout rate")
+parser.add_argument("--K_mdn", dest="K_mdn", type=int, default=5, help="the number of Gaussian components for mixture density network")
+
+### training parameters ###
+parser.add_argument("--r_train", dest="r_train", type=float, default=0.9, help="ratio of number of training data to ndata")
 parser.add_argument("--batch_size", dest="batch_size", type=int, default=4, help="batch size")
 parser.add_argument("--epoch", dest="epoch", type=int, default=10, help="training epoch")
 parser.add_argument("--epoch_decay", dest="epoch_decay", type=int, default=0, help="training epoch")
@@ -47,11 +54,7 @@ parser.add_argument("--lr", dest="lr", type=float, default=1e-3, help="learning 
 parser.add_argument("--loss", dest="loss", default="l1norm", help="loss function")
 parser.add_argument("--batch_norm", action="store_true", help="batch normalization")
 parser.add_argument("--l2_lambda", dest="l2_lambda", type=float, default=-1.0, help="L2 regulartization for avoiding overfitting")
-
 parser.add_argument("--i_layer_freeze", dest="i_layer_freeze", nargs="+", type=int, default=-1, help="layer numbers (0, 1, ..., n_layer-1) to be freezed. You can freeze multple layers.")
-
-parser.add_argument("--progress_bar", action="store_true")
-
 
 args = parser.parse_args()
 
@@ -82,12 +85,6 @@ def main():
         test(device)
 
 
-def update_learning_rate(optimizer, scheduler):
-    old_lr = optimizer.param_groups[0]["lr"]
-    scheduler.step()
-    lr = optimizer.param_groups[0]['lr']
-    print('# learning rate %.7f -> %.7f' % (old_lr, lr))
-
 class EarlyStopping:
     def __init__(self, patience=100, delta=0.1):
         self.count = 0
@@ -105,6 +102,30 @@ class EarlyStopping:
         elif current_loss < self.pre_loss:
             self.count = 0
             self.pre_loss = current_loss
+            
+ONEOVERSQRT2PI = 1.0 / np.sqrt(2*np.pi)
+
+class MDNLoss():
+    def __init__(self, n_feature_out, K_mdn):
+        self.n_feature_out = n_feature_out
+        self.K_mdn = K_mdn
+    def forward(self, output, target): 
+        # output: (batch, n_feature_out * K_mdn * 3)
+        # target: (batch, n_feature_out)
+    
+        pi, mu, sigma = torch.split(output, self.K_mdn * self.n_feature_out, dim=1)
+        pi = pi.view(-1, self.K_mdn, self.n_feature_out) # (batch, K_mdn, n_feature_out)
+        mu = mu.view(-1, self.K_mdn, self.n_feature_out) # (batch, K_mdn, n_feature_out)
+        sigma = sigma.view(-1, self.K_mdn, self.n_feature_out) # (batch, K_mdn, n_feature_out)
+        sigma = sigma + 1e-6
+
+        target = target.unsqueeze(1).expand_as(sigma) # (batch, K_mdn, n_feature_out)
+        prob = ONEOVERSQRT2PI / sigma * torch.exp(-0.5 * (target - mu)**2 / sigma**2)
+        prob = torch.sum(prob * pi, dim=1) # (batch)
+        nll = -torch.log(prob + 1e-6)
+        return torch.mean(nll)
+
+
 
 ####################################################
 ### training
@@ -116,11 +137,16 @@ def train(device):
     n_feature_out = 1 if isinstance(args.output_id, int) else len(args.output_id)
 
     ### define loss function ###
+    if args.model == "MDN":
+        args.loss = "mdnloss"
+
     if args.loss == "nllloss":
         loss_func = nn.NLLLoss(reduction="mean")
         if args.output_dim < 2:
             print("Error: output_dim should be greater than 1 for NLLLoss", file=sys.stderr)
             sys.exit(1)
+    elif args.loss == "mdnloss":
+        loss_func = MDNLoss(n_feature_out, args.K_mdn)
     else:
 
         reduction = "mean"
@@ -282,6 +308,14 @@ def train(device):
             for i, (ll, oo) in enumerate(zip(val_label, output)):
                 if args.loss == "nllloss":
                     oo = torch.argmax(oo, dim=0)
+                elif args.loss == "mdnloss":
+                    pi, mu, sigma = torch.split(oo, args.K_mdn * n_feature_out)
+                    pi = pi.view(args.K_mdn, n_feature_out)
+                    mu = mu.view(args.K_mdn, n_feature_out)
+                    oo = torch.mean(mu * pi, dim=0)
+                    # or, you can use the following to pick up the most probable value
+                    # max_pi = torch.argmax(pi, dim=0)
+                    # oo = mu[max_pi, torch.arange(n_feature_out)]
 
                 pred = denorm(oo, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
                 true = denorm(ll, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
@@ -300,6 +334,24 @@ def train(device):
                         print((iclass+0.5)/args.output_dim, end=" ", file=f)
                         for j in range(n_feature_out):
                             print(oo[iclass,j].item(), end=" ", file=f)
+                        print("", file=f)
+                print(f"# output {fname}", file=sys.stderr)
+        elif args.loss == "mdnloss":
+            for i, oo in enumerate(output):
+                fname = "{}/val_dist{:d}.txt".format(args.model_dir_save, i)
+                with open(fname, "w") as f:
+                    pi, mu, sigma = torch.split(oo, args.K_mdn * n_feature_out)
+                    pi = pi.view(args.K_mdn, n_feature_out)
+                    mu = mu.view(args.K_mdn, n_feature_out)
+                    sigma = sigma.view(args.K_mdn, n_feature_out)
+                    sigma = sigma + 1e-6
+                
+                    for iclass in range(args.output_dim):
+                        print(iclass, end=" ", file=f)
+                        for j in range(n_feature_out):
+                            d = iclass / args.output_dim
+                            prob = torch.sum( ONEOVERSQRT2PI / sigma[:,j] * torch.exp(-0.5 * (d - mu[:,j])**2 / sigma[:,j]**2) * pi[:,j] )
+                            print(prob, end=" ", file=f)
                         print("", file=f)
                 print(f"# output {fname}", file=sys.stderr)
 
@@ -352,8 +404,8 @@ def test(device):
 
     ### load test data ###
     norm_params = np.loadtxt(args.fname_norm)
-    _, test_fnames, _, test_ids = load_fnames(args.test_dir, args.ndata, id_start=0, r_train=0.0, shuffle=False)
-    fname_comb = f"{args.test_dir}/../Combinations.txt"
+    _, test_fnames, _, test_ids = load_fnames(args.data_dir, args.ndata, id_start=0, r_train=0.0, shuffle=False)
+    fname_comb = f"{args.data_dir}/../Combinations.txt"
     if args.seq_length_2 < 1:
         data, label = load_data(test_fnames, test_ids, fname_comb, args.output_dim, input_id=args.input_id, output_id=args.output_id, seq_length=args.seq_length, norm_params=norm_params, loss=args.loss, device=None, pbar=args.progress_bar)
     else:
@@ -370,6 +422,11 @@ def test(device):
             output = model(dd)
             if args.loss == "nllloss":
                 output = torch.argmax(output, dim=1)
+            elif args.loss == "mdnloss":
+                pi, mu, sigma = torch.split(output, args.K_mdn * n_feature_out, dim=1)
+                pi = pi.view(-1, args.K_mdn, n_feature_out)
+                mu = mu.view(-1, args.K_mdn, n_feature_out)
+                oo = torch.mean(mu * pi, dim=1)
 
             pred = denorm(output, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)
             true = denorm(ll, norm_params, n_feature_in, n_feature_out, args.output_dim, args.loss)

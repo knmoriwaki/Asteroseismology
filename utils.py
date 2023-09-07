@@ -11,6 +11,12 @@ from torch.utils.data import Dataset
 
 from tqdm import tqdm
 
+def update_learning_rate(optimizer, scheduler):
+    old_lr = optimizer.param_groups[0]["lr"]
+    scheduler.step()
+    lr = optimizer.param_groups[0]['lr']
+    print('# learning rate %.7f -> %.7f' % (old_lr, lr))
+
 def denorm(target, norm_params, n_feature_in, n_feature_out, output_dim, loss, batch=None):
 
     ## target should have a shape (batch, n_feature_out)
