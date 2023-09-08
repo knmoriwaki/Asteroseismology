@@ -26,7 +26,7 @@ def MyModel(args):
         model = ConvNet(Conv1dBlock, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, seq_length_out=args.output_dim, hidden_dim=args.hidden_dim, n_layer=args.n_layer, r_drop=args.r_drop, batch_norm=args.batch_norm, last_act=last_act, nlayer_increase=args.nlayer_increase, additional_layer="lstm2")
 
     elif args.model == "MDN":
-        model = MixtureDensityNetwork(Conv1dBlock, K_mdn=args.K_mdn, n_feature_in=n_feature_in, n_feature_out=n_feature_out, hidden_dim=args.hidden_dim, n_layer=args.n_layer, nlayer_increase=args.nlayer_increase, last_act=last_act, additional_layer="lstm2")
+        model = MixtureDensityNetwork(Conv1dBlock, K_mdn=args.K_mdn, n_feature_in=n_feature_in, n_feature_out=n_feature_out, seq_length=args.seq_length, hidden_dim=args.hidden_dim, n_layer=args.n_layer, nlayer_increase=args.nlayer_increase, last_act=nn.Sigmoid(), additional_layer="lstm2")
 
     elif "CNN" in args.model:
         if args.seq_length_2 > 0:
@@ -192,28 +192,22 @@ class ConvNet(nn.Module):
             for i, j, r in zip(input_dims, output_dims, dropout_rates)
             ])
 
+        ### e.g., for seq_length = 10 with 
+        ### (input_dim, 10) -> (hidden_dim*2, 5) -> (hidden_dim*4, 3) -> (hidden_dim*8, 2) 
+        seq_length_tmp = seq_length
+        for i in range(n_layer): seq_length_tmp = int( ( seq_length_tmp + 1 ) / 2 )
+
         self.additional_layer = additional_layer
         if "lstm" in self.additional_layer:
             self.hidden_size = 256
             self.n_layer_lstm = 2 if "2" in self.additional_layer else 1
             self.lstm = nn.LSTM(input_size=output_dims[-1], hidden_size=self.hidden_size, num_layers=self.n_layer_lstm, batch_first=True, dropout=r_drop)
-
-            tmp = seq_length
-            for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
-            final_dim = tmp * self.hidden_size
-            if "_lstm" in self.additional_layer:
-                final_dim = self.hidden_dim
-
+            final_dim = seq_length_tmp * self.hidden_size
         elif self.additional_layer == "attention":
             self.attention = nn.MultiheadAttention(embed_dim=output_dims[-1], num_heads=8, batch_first=True)
-            final_dim = output_dims[-1] * self.n_layer_lstm
-            
+            final_dim = seq_length_tmp * output_dims[-1] 
         else:
-            ### e.g., for seq_length = 10 with 
-            ### (input_dim, 10) -> (hidden_dim*2, 5) -> (hidden_dim*4, 3) -> (hidden_dim*8, 2) 
-            tmp = seq_length
-            for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
-            final_dim = tmp * output_dims[-1]
+            final_dim = seq_length_tmp * output_dims[-1]
         
         self.dropout = nn.Dropout(r_drop)
         self.linear = nn.Linear(final_dim, seq_length_out*n_feature_out)
@@ -240,14 +234,12 @@ class ConvNet(nn.Module):
             ## c_t: final cell state (n_layer_lstm, batch, hidden_size)
             ## h_t and c_t have batch at the second component even when batch_first = True
             
-            if "_lstm" in self.additional_layer:
-                x = torch.transpose(h_t, 0, 1)
-                ## x: (batch, n_layer_lstm, hidden_size)
-                x = x.contiguous().view(batch_size, -1)
-                ## x: (batch, n_layer_lstm * hidden_size)
-            else:
-                x = x.contiguous().view(batch_size, -1)
-                ## x: (batch, hidden_size * seq/2**n_layer)
+            x = x.contiguous().view(batch_size, -1)
+            ## x: (batch, hidden_size * seq/2**n_layer)
+            
+            # Another possibility is to use the last hidden state
+            # x = torch.transpose(h_t, 0, 1) ## x: (batch, n_layer_lstm, hidden_size)
+            # x = x.contiguous().view(batch_size, -1) ## x: (batch, n_layer_lstm * hidden_size)
 
         elif self.additional_layer == "attention":
             x = torch.transpose(x, 1, 2)
@@ -361,32 +353,26 @@ class MixtureDensityNetwork(nn.Module):
             block(nin=i, nout=j, stride=2, kernel_size=kernel_size, padding=padding, bn=batch_norm, r_drop=r)
             for i, j, r in zip(input_dims, output_dims, dropout_rates)
             ])
+        
+        ### e.g., for seq_length = 10 with 
+        ### (input_dim, 10) -> (hidden_dim*2, 5) -> (hidden_dim*4, 3) -> (hidden_dim*8, 2) 
+        seq_length_tmp = seq_length
+        for i in range(n_layer): seq_length_tmp = int( ( seq_length_tmp + 1 ) / 2 )
 
         self.additional_layer = additional_layer
         if "lstm" in self.additional_layer:
             self.hidden_size = 256
             self.n_layer_lstm = 2 if "2" in self.additional_layer else 1
             self.lstm = nn.LSTM(input_size=output_dims[-1], hidden_size=self.hidden_size, num_layers=self.n_layer_lstm, batch_first=True, dropout=r_drop)
-
-            tmp = seq_length
-            for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
-            final_dim = tmp * self.hidden_size
-            if "_lstm" in self.additional_layer:
-                final_dim = self.hidden_dim
-
+            final_dim = seq_length_tmp * self.hidden_size
         elif self.additional_layer == "attention":
             self.attention = nn.MultiheadAttention(embed_dim=output_dims[-1], num_heads=8, batch_first=True)
-            final_dim = output_dims[-1] * self.n_layer_lstm
-            
+            final_dim = seq_length_tmp * output_dims[-1] 
         else:
-            ### e.g., for seq_length = 10 with 
-            ### (input_dim, 10) -> (hidden_dim*2, 5) -> (hidden_dim*4, 3) -> (hidden_dim*8, 2) 
-            tmp = seq_length
-            for i in range(n_layer): tmp = int( ( tmp + 1 ) / 2 )
-            final_dim = tmp * output_dims[-1]
+            final_dim = seq_length_tmp * output_dims[-1]
         
         self.dropout = nn.Dropout(r_drop)
-
+        
         self.linear_pi = nn.Linear(final_dim, n_feature_out*K_mdn)
         self.linear_mu = nn.Linear(final_dim, n_feature_out*K_mdn)
         self.linear_sigma = nn.Linear(final_dim, n_feature_out*K_mdn)
@@ -416,14 +402,12 @@ class MixtureDensityNetwork(nn.Module):
             ## c_t: final cell state (n_layer_lstm, batch, hidden_size)
             ## h_t and c_t have batch at the second component even when batch_first = True
             
-            if "_lstm" in self.additional_layer:
-                x = torch.transpose(h_t, 0, 1)
-                ## x: (batch, n_layer_lstm, hidden_size)
-                x = x.contiguous().view(batch_size, -1)
-                ## x: (batch, n_layer_lstm * hidden_size)
-            else:
-                x = x.contiguous().view(batch_size, -1)
-                ## x: (batch, hidden_size * seq/2**n_layer)
+            x = x.contiguous().view(batch_size, -1)
+            ## x: (batch, hidden_size * seq/2**n_layer)
+            
+            # Another possibility is to use the last hidden state h_t
+            # x = torch.transpose(h_t, 0, 1) ## x: (batch, n_layer_lstm, hidden_size)
+            # x = x.contiguous().view(batch_size, -1) ## x: (batch, n_layer_lstm * hidden_size)
 
         elif self.additional_layer == "attention":
             x = torch.transpose(x, 1, 2)

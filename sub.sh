@@ -9,13 +9,14 @@ input_id=2
 fname_norm=./param/norm_params.txt
 
 nrea_noise=1
-ndata=100
+ndata=256
 r_train=0.99
 
 ### ML model parameters ###
 
 model=CNN
 model=Dhanpal22
+model=MDN
 
 hidden_dim=16
 n_layer=6
@@ -23,11 +24,12 @@ nlayer_increase=5
 r_drop=0.5
 
 ### training parameters ###
-batch_size=128
+batch_size=32 #128
 epoch=20
 epoch_decay=20
 total_epoch=$(( epoch + epoch_decay ))
 lr=0.001
+#lr=1e-8
 l2_lambda=-1.0
 #l2_lambda=0.001
 
@@ -55,8 +57,8 @@ python main.py --gpu_id $gpu_id --isTrain --data_dir $data_dir --comb_dir $comb_
 echo "# output ./tmp/out_${today}_${model_base}.log"
 
 ### test ###
-test_dir=./Test_HBR5/Spectra_ascii
+data_dir=./Test_HBR5/Spectra_ascii
 comb_dir=./Test_HBR5
 ndata_test=100
-python main.py --gpu_id $gpu_id --test_dir $test_dir --comb_dir $comb_dir --ndata $ndata_test --model_dir_load $model_dir --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --nlayer_increase $nlayer_increase --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 5 --progress_bar
+python main.py --gpu_id $gpu_id --data_dir $data_dir --comb_dir $comb_dir --ndata $ndata_test --model_dir_load $model_dir --model_dir_save $model_dir --model ${model} --fname_norm $fname_norm --input_id $input_id --seq_length $seq_length --hidden_dim $hidden_dim --n_layer $n_layer --nlayer_increase $nlayer_increase --batch_size $batch_size --loss $loss --output_dim $output_dim --output_id 13 5 --progress_bar
 
