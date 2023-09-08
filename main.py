@@ -114,17 +114,11 @@ class MDNLoss(nn.Module):
         # output: (batch, n_feature_out * K_mdn * 3)
         # target: (batch, n_feature_out)
     
-        print("aaa")
-        print(target.size())
         pi, mu, sigma = torch.split(output, self.K_mdn * self.n_feature_out, dim=1)
         pi = pi.view(-1, self.K_mdn, self.n_feature_out) # (batch, K_mdn, n_feature_out)
         mu = mu.view(-1, self.K_mdn, self.n_feature_out) # (batch, K_mdn, n_feature_out)
         sigma = sigma.view(-1, self.K_mdn, self.n_feature_out) # (batch, K_mdn, n_feature_out)
         sigma = sigma + 1e-6
-        print("pi")
-        print(pi)
-        print("mu")
-        print(mu.size())
 
         target = target.unsqueeze(1).expand_as(sigma) # (batch, K_mdn, n_feature_out)
         prob = ONEOVERSQRT2PI / sigma * torch.exp(-0.5 * (target - mu)**2 / sigma**2)
