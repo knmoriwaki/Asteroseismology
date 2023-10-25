@@ -146,6 +146,13 @@ def train(device):
         if args.output_dim < 2:
             print("Error: output_dim should be greater than 1 for NLLLoss", file=sys.stderr)
             sys.exit(1)
+    elif args.loss == "weighted_nllloss": 
+        loss_func = nn.NLLLoss(reduction="none")
+        threshold = 70 # put more focus on id above this threshold 
+        factor = 2.0 # multipy the weight by this factor for id > threshold
+        if args.output_dim < 2:
+            print("Error: output_dim should be greater than 1 for NLLLoss", file=sys.stderr)
+            sys.exit(1)
     elif args.loss == "mdnloss":
         loss_func = MDNLoss(n_feature_out, args.K_mdn)
     else:
@@ -235,6 +242,10 @@ def train(device):
             print_pdf(pdf[i], hist_min[i], hist_max[i])
         
         pdf = torch.from_numpy(pdf).to(device)
+        
+        weights_val = calc_weight(pdf, val_label, hist_min, hist_max).to(device)
+        if args.loss == "weighted_nllloss":
+            weights_val = torch.where(val_label[:, 0] > threshold, torch.tensor(factor), torch.tensor(1.0)).to(device)
 
     ### training ###
     idx = 0
@@ -263,7 +274,11 @@ def train(device):
                 output_val = model(val_data)
             model.train()
 
-            if "weighted" in args.loss:
+            if args.loss == "weighted_nllloss":
+                weights = torch.where(ll[:, 0] > threshold, torch.tensor(factor), torch.tensor(1.0)) # weight = factor if the second id of the label (inclination) > threshold, else weight = 1.0
+                weights_val = torch.where(val_label[:, 0] > threshold, torch.tensor(factor), torch.tensor(1.0))
+                loss = torch.mean( weights * loss_func(output, ll) )
+            elif "weighted" in args.loss:
                 weights = calc_weight(pdf, output, hist_min, hist_max).to(device)
                 weights_val = calc_weight(pdf, output_val, hist_min, hist_max).to(device) 
                 loss = torch.mean( nbin * weights / weights.sum() * loss_func(output, ll) )
