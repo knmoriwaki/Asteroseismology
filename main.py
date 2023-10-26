@@ -275,9 +275,10 @@ def train(device):
             model.train()
 
             if args.loss == "weighted_nllloss":
-                weights = torch.where(ll[:, 1] > threshold, torch.tensor(factor), torch.tensor(1.0)) # weight = factor if the second id of the label (inclination) > threshold, else weight = 1.0
-                loss = torch.mean( weights * loss_func(output, ll) )
-                loss_val = torch.mean( weights_val * loss_func(output_val, val_label) )
+                weights = torch.where(ll[:, 1] > threshold, torch.tensor(factor), torch.tensor(1.0)).to(device) # weight = factor if the second id of the label (inclination) > threshold, else weight = 1.0
+                loss = torch.mean( weights / weights.sum() * loss_func(output, ll) )
+                loss_val = torch.mean( weights_val / weights_val.sum() * loss_func(output_val, val_label) )
+                del weights, weights_val
             elif "weighted" in args.loss:
                 weights = calc_weight(pdf, output, hist_min, hist_max).to(device)
                 weights_val = calc_weight(pdf, output_val, hist_min, hist_max).to(device) 
